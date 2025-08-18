@@ -1,0 +1,7 @@
+apache-airflow==3.0.4
+fredapi
+pandas-market-calendars
+polars
+tqdm
+yfinance
+s3fs
