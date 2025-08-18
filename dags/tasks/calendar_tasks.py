@@ -36,14 +36,14 @@ def calendar_etl_daily() -> None:
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('pipelines/ibkr/sql/calendar_create.sql')
+    db.execute_sql_file('dags/sql/calendar_create.sql')
 
     # 3. Load into stage table
     stage_table = f"{last_market_date}_CALENDAR"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
-    db.execute_sql_template_file('pipelines/ibkr/sql/calendar_merge.sql', params={'stage_table': stage_table})
+    db.execute_sql_template_file('dags/sql/calendar_merge.sql', params={'stage_table': stage_table})
 
     # 5. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
@@ -61,14 +61,14 @@ def calendar_etl_backfill(start_date: dt.date, end_date: dt.date) -> None:
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('pipelines/ibkr/sql/calendar_create.sql')
+    db.execute_sql_file('dags/sql/calendar_create.sql')
 
     # 3. Load into stage table
     stage_table = f"{start_date}_{end_date}_CALENDAR"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
-    db.execute_sql_template_file('pipelines/ibkr/sql/calendar_merge.sql', params={'stage_table': stage_table})
+    db.execute_sql_template_file('dags/sql/calendar_merge.sql', params={'stage_table': stage_table})
 
     # 5. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')

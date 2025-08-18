@@ -18,11 +18,11 @@ def fund_return_materializations_daily() -> None:
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('pipelines/ibkr/sql/fund_returns_create.sql')
+    db.execute_sql_file('dags/sql/fund_returns_create.sql')
 
     # 2. Materialize table
     db.execute_sql_template_file(
-        file_name='pipelines/ibkr/sql/fund_returns_materialize.sql',
+        file_name='dags/sql/fund_returns_materialize.sql',
         params={'start_date': last_market_date, 'end_date': last_market_date}
     )
 
@@ -36,10 +36,10 @@ def fund_return_materializations_backfill(start_date: dt.date, end_date: dt.date
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('pipelines/ibkr/sql/fund_returns_create.sql')
+    db.execute_sql_file('dags/sql/fund_returns_create.sql')
 
     # 2. Materialize table
     db.execute_sql_template_file(
-        file_name='pipelines/ibkr/sql/fund_returns_materialize.sql',
+        file_name='dags/sql/fund_returns_materialize.sql',
         params={'start_date': start_date, 'end_date': end_date}
     )

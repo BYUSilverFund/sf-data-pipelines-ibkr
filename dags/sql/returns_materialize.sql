@@ -1,0 +1,127 @@
+INSERT INTO returns (
+    report_date,
+    client_account_id,
+    symbol,
+    weight,
+    shares,
+    close,
+    return,
+    dividends_per_share
+)
+WITH positions AS (
+    SELECT
+        client_account_id,
+        report_date,
+        symbol,
+        fx_rate_to_base AS fx_rate_1,
+        quantity AS shares_1,
+        mark_price AS price_1,
+        CASE WHEN quantity > 0 THEN 1 ELSE -1 END AS side,
+        COALESCE(LAG(fx_rate_to_base) OVER (PARTITION BY client_account_id, symbol ORDER BY report_date), fx_rate_to_base) AS fx_rate_0,
+        COALESCE(LAG(quantity) OVER (PARTITION BY client_account_id, symbol ORDER BY report_date), quantity) AS shares_0,
+        COALESCE(LAG(mark_price) OVER (PARTITION BY client_account_id, symbol ORDER BY report_date), mark_price) AS price_0
+    FROM positions_new
+    WHERE sub_category IN ('ETF', 'COMMON')
+        AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
+),
+dividends AS(
+    SELECT
+        client_account_id,
+        report_date,
+        symbol,
+        SUM(net_amount) AS dividends,
+        SUM(gross_rate) AS dividends_per_share
+    FROM dividends_new
+    WHERE sub_category IN ('ETF', 'COMMON')
+        AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
+    GROUP BY client_account_id, symbol, report_date
+),
+trades AS(
+    SELECT
+        client_account_id,
+        report_date,
+        symbol,
+        SUM(quantity) AS shares_traded,
+        SUM(quantity * trade_price) / SUM(quantity) AS average_trade_price
+    FROM trades_new
+    WHERE sub_category IN ('ETF', 'COMMON')
+        AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
+    GROUP BY client_account_id, symbol, report_date
+),
+merge AS(
+    SELECT
+        p.client_account_id,
+        p.report_date,
+        p.symbol,
+        p.side,
+        p.fx_rate_0,
+        p.fx_rate_1,
+        p.shares_0,
+        p.shares_1,
+        p.price_0,
+        p.price_1,
+        COALESCE(d.dividends, 0) AS dividends,
+        COALESCE(d.dividends_per_share, 0) AS dividends_per_share,
+        COALESCE(t.shares_traded, 0) AS shares_traded,
+        COALESCE(t.average_trade_price, 0) AS average_trade_price
+    FROM positions p
+    LEFT JOIN dividends d ON p.client_account_id = d.client_account_id
+        AND p.report_date = d.report_date
+        AND p.symbol = d.symbol
+    FULL JOIN trades t on p.client_account_id = t.client_account_id
+        AND p.report_date = t.report_date
+        AND p.symbol = t.symbol
+),
+adjustments AS(
+    SELECT
+        client_account_id,
+        report_date,
+        symbol,
+        side,
+        shares_0,
+        shares_1,
+        (
+            CASE
+                WHEN shares_1 - shares_traded = 0 -- Initial trade
+                THEN shares_1
+                ELSE shares_1 - shares_traded -- Subtract off traded shares
+            END
+        ) AS shares_1_adj,
+        price_0 * fx_rate_0 AS price_0,
+        price_1 * fx_rate_1 AS price_1,
+        dividends,
+        dividends_per_share
+    FROM merge
+),
+returns AS(
+    SELECT
+        client_account_id,
+        report_date,
+        symbol,
+        (shares_1 * price_1) / SUM(shares_1 * price_1) OVER (PARTITION BY client_account_id, report_date) AS weight,
+        shares_1 AS shares,
+        price_1 AS close,
+        (shares_1_adj * price_1 - dividends) / (shares_0 * price_0) - 1 AS return,
+        dividends_per_share
+    FROM adjustments a
+    INNER JOIN calendar_new c ON a.report_date = c.date
+)
+SELECT 
+    report_date,
+    client_account_id,
+    symbol,
+    weight,
+    shares,
+    close,
+    return,
+    dividends_per_share
+FROM returns
+ORDER BY client_account_id, report_date, symbol
+ON CONFLICT (report_date, client_account_id, symbol)
+DO UPDATE SET
+    weight = EXCLUDED.weight,
+    shares = EXCLUDED.shares,
+    close = EXCLUDED.close,
+    return = EXCLUDED.return,
+    dividends_per_share = EXCLUDED.dividends_per_share
+;
