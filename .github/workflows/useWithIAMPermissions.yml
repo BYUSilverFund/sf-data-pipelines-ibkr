@@ -1,0 +1,52 @@
+name: Deploy Airflow to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: "us-west-2"
+
+permissions:
+  id-token: write # Required for requesting the JWT
+  contents: read # Required for actions/checkout
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::673541324313:role/sf-data-pipeline-ibkr-CI-CD
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
+
+    #   - name: Build Docker image
+    #     run: |
+    #       docker build -t ${{ secrets.ECR_REPOSITORY }}:latest .
+
+    #   - name: Tag Docker image
+    #     run: |
+    #       docker tag ${{ secrets.ECR_REPOSITORY }}:latest ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
+
+    #   - name: Push Docker image to ECR
+    #     run: |
+    #       docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
+
+    #   - name: Update ECS service to use new image
+    #     env:
+    #       AWS_REGION: ${{ env.AWS_REGION }}
+    #       CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
+    #       SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
+    #       IMAGE_URI: ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
+    #     run: |
+    #       aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment
