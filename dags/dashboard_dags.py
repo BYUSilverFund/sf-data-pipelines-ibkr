@@ -9,6 +9,7 @@ from tasks.return_materialization_tasks import return_materializations_daily
 @dag(
     schedule="@daily",
     start_date=None,
+    max_active_tasks=1
 )
 def dashboard_dag_daily():
     [
