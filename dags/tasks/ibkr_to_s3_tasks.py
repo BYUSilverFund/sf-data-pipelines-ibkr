@@ -33,13 +33,14 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
     s3.drop_file(file_name=file_name, bucket_name='ibkr-flex-query-files', file_data=df)
 
 @task
-def extract_and_store_task_backfill(config: dict, query: str, start_date: dt.date, end_date: dt.date):
+def extract_and_store_task_backfill(config: dict, query: str, from_date: dt.date, to_date: dt.date):
+    # pass
     # 1. Pull data from IBKR
     df = tools.ibkr_query_batches(
         token=config['token'],
         query_id=config['queries'][query],
-        start_date=start_date,
-        end_date=end_date
+        from_date=from_date,
+        to_date=to_date
     )
 
     # 2. Save to S3
@@ -49,7 +50,7 @@ def extract_and_store_task_backfill(config: dict, query: str, start_date: dt.dat
         region_name=os.getenv('COGNITO_REGION'),
     )
 
-    file_name = f"backfill-files/{start_date}_{end_date}/{config['fund']}/{start_date}_{end_date}-{config['fund']}-{query}.csv"
+    file_name = f"backfill-files/{from_date}_{to_date}/{config['fund']}/{from_date}_{to_date}-{config['fund']}-{query}.csv"
     s3.drop_file(file_name=file_name, bucket_name='ibkr-flex-query-files', file_data=df)
 
 @task_group
@@ -58,9 +59,10 @@ def exctract_and_store_group_daily(query: str):
         extract_and_store_task_daily.override(task_id=f"{config['fund']}_{query}_extract_and_store")(config, query)
 
 @task_group
-def exctract_and_store_group_backfill(query: str, start_date: dt.date, end_date: dt.date) -> None:
+def exctract_and_store_group_backfill(query: str, from_date: dt.date, to_date: dt.date) -> None:
+    # pass
     for config in configs:
-        extract_and_store_task_backfill.override(task_id=f"{config['fund']}_{query}_extract_and_store")(config, query, start_date, end_date)
+        extract_and_store_task_backfill.override(task_id=f"{config['fund']}_{query}_extract_and_store")(config, query, from_date, to_date)
 
 @task_group
 def ibkr_to_s3_daily():
@@ -69,7 +71,7 @@ def ibkr_to_s3_daily():
         exctract_and_store_group_daily.override(group_id=f"{query}_extract_and_store")(query)
 
 @task_group
-def ibkr_to_s3_backfill(start_date: dt.date, end_date: dt.date):
+def ibkr_to_s3_backfill(from_date: dt.date, to_date: dt.date):
     queries = ['delta_nav', 'dividends', 'positions', 'trades']
     for query in queries:
-        exctract_and_store_group_backfill.override(group_id=f"{query}_extract_and_store")(query, start_date, end_date)
+        exctract_and_store_group_backfill.override(group_id=f"{query}_extract_and_store")(query, from_date, to_date)

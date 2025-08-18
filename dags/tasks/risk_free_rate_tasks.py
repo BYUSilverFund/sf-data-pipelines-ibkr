@@ -77,9 +77,9 @@ def risk_free_rate_etl_daily() -> None:
     db.execute(f'DROP TABLE "{stage_table}";')
 
 @task(task_id="risk_free_rate_etl")
-def risk_free_rate_etl_backfill(start_date: dt.date, end_date: dt.date) -> None:
+def risk_free_rate_etl_backfill(from_date: dt.date, to_date: dt.date) -> None:
     # 1. Get risk free rate data
-    df = get_risk_free_rate(start_date, end_date)
+    df = get_risk_free_rate(from_date, to_date)
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -92,7 +92,7 @@ def risk_free_rate_etl_backfill(start_date: dt.date, end_date: dt.date) -> None:
     db.execute_sql_file('dags/sql/risk_free_rate_create.sql')
 
     # 3. Load into stage table
-    stage_table = f"{start_date}_{end_date}_RISK_FREE_RATE"
+    stage_table = f"{from_date}_{to_date}_RISK_FREE_RATE"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table

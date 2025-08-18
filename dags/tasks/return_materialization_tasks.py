@@ -11,7 +11,7 @@ def return_materializations_daily():
     all_fund_return_materializations_daily()
 
 @task_group(group_id="return_materializations")
-def return_materializations_backfill(start_date: dt.date, end_date: dt.date):
-    holding_return_materializations_backfill(start_date, end_date)
-    fund_return_materializations_backfill(start_date, end_date)
-    all_fund_return_materializations_backfill(start_date, end_date)
+def return_materializations_backfill(from_date: dt.date, to_date: dt.date):
+    holding_return_materializations_backfill(from_date, to_date)
+    fund_return_materializations_backfill(from_date, to_date)
+    all_fund_return_materializations_backfill(from_date, to_date)

@@ -151,7 +151,7 @@ def ibkr_query(token: int, query_id: str, from_date: dt.date, to_date: dt.date, 
 
     return df
 
-def ibkr_query_batches(token: int, query_id: str, start_date: dt.date, end_date: dt.date, flex_version: int = 3) -> pl.DataFrame:
+def ibkr_query_batches(token: int, query_id: str, from_date: dt.date, to_date: dt.date, flex_version: int = 3) -> pl.DataFrame:
     """Function for pulling data from IBKR in batches.
     
     IBKR allows for pulling data from up to a year ago.
@@ -163,24 +163,24 @@ def ibkr_query_batches(token: int, query_id: str, start_date: dt.date, end_date:
     Args:
         token (int): Token from IBKR flex query dashboard (expires annualy).
         query_id (str): ID from IBKR flex query dashboard.
-        start_date (dt.date): Date from which to start the query.
-        from_date (dt.date): Date from which to end the query.
+        from_date (dt.date): Date from which to start the query.
+        to_date (dt.date): Date from which to end the query.
         flex_version (int): Version of Flex Query Service to use (we use version 3).
     """
     # Validate start and end date.
     min_start_date = dt.date.today() - du.relativedelta(years=1)
     min_start_date = min_start_date.replace(day=1) + du.relativedelta(months=1)
 
-    if start_date < min_start_date:
-        raise Exception(f"Invalid start date: {start_date}. Must be greater than or equal to {min_start_date}.")
+    if from_date < min_start_date:
+        raise Exception(f"Invalid start date: {from_date}. Must be greater than or equal to {min_start_date}.")
     
     max_end_date = dt.date.today() - du.relativedelta(days=1)
 
-    if end_date > max_end_date:
-        raise Exception(f"Invalid end date: {end_date}. Must be less than or equal to {max_end_date}")
+    if to_date > max_end_date:
+        raise Exception(f"Invalid end date: {to_date}. Must be less than or equal to {max_end_date}")
     
     # Get date intervals
-    date_intervals = _get_trading_date_intervals(start_date, end_date)
+    date_intervals = _get_trading_date_intervals(from_date, to_date)
 
     df_list = []
     for from_date, to_date in tqdm.tqdm(date_intervals, desc="Pulling data from IBKR"):

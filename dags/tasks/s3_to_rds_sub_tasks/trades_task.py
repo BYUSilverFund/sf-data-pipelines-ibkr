@@ -99,9 +99,9 @@ def trades_transform_and_load_daily():
     db.execute(f'DROP TABLE "{stage_table}";')
 
 @task(task_id="trades_transform_and_load")
-def trades_transform_and_load_backfill(start_date: dt.date, end_date: dt.date):
+def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     # 1. Process raw positions data
-    source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{start_date}_{end_date}/*/*-trades.csv"
+    source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-trades.csv"
 
     storage_options = {
         "key": os.getenv('COGNITO_ACCESS_KEY_ID'),
@@ -130,7 +130,7 @@ def trades_transform_and_load_backfill(start_date: dt.date, end_date: dt.date):
     db.execute_sql_file('dags/sql/trades_create.sql')
 
     # 3. Load into stage table
-    stage_table = f"{start_date}_{end_date}_TRADES"
+    stage_table = f"{from_date}_{to_date}_TRADES"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
