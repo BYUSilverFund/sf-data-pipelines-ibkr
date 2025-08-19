@@ -1,3 +1,5 @@
+import datetime as dt
+
 configs = [
     {
         "fund": "grad",
@@ -44,3 +46,5 @@ configs = [
         }
     },
 ]
+
+min_date = dt.date(2020, 1, 1)
