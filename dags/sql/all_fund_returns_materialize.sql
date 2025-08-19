@@ -4,14 +4,27 @@ INSERT INTO all_fund_returns (
     return,
     dividends
 )
-WITH values AS(
+WITH transform AS(
+    SELECT
+        date,
+        CASE
+            WHEN starting_value = 0
+            THEN ending_value
+            ELSE starting_value
+        END AS starting_value,
+        ending_value,
+        deposits_withdrawals,
+        dividends
+    FROM delta_nav_new
+),
+values AS(
     SELECT
         date,
         SUM(starting_value) AS starting_value,
         SUM(ending_value) AS ending_value,
         SUM(deposits_withdrawals) AS deposits_withdrawals,
         SUM(dividends) AS dividends
-    FROM delta_nav_new
+    FROM transform
     GROUP BY date
 )
 SELECT

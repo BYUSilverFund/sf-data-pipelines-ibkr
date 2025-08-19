@@ -48,6 +48,9 @@ def clean_trades_data(df: pl.DataFrame) -> pl.DataFrame:
         .filter(pl.col('ClientAccountID').ne('ClientAccountID'))
         .select(trades_column_mapping.keys())
         .rename(trades_column_mapping)
+        .filter(
+            pl.col('buy_sell').is_in(['BUY', 'SELL'])
+        )
         .with_columns(
             pl.col('report_date').str.strptime(pl.Date, "%Y%m%d"),
         )
@@ -137,4 +140,56 @@ def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     db.execute_sql_template_file('dags/sql/trades_merge.sql', params={'stage_table': stage_table})
 
     # 5. Drop stage table
+    db.execute(f'DROP TABLE "{stage_table}";')
+
+@task(task_id="trades_transform_and_load")
+def trades_transform_and_load_reload():
+    # 1. Get all files in S3
+    storage_options = {
+        "key": os.getenv('COGNITO_ACCESS_KEY_ID'),
+        "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+    }
+
+    def get_file_list(source_pattern: str) -> list[str]:
+        fs = fsspec.filesystem("s3", **storage_options)
+        return fs.glob(source_pattern)
+
+    history_pattern = "s3://ibkr-flex-query-files/history-files/*/*trades*.csv"
+    history_files = get_file_list(history_pattern)
+
+    backfill_pattern = "s3://ibkr-flex-query-files/backfill-files/*/*/*trades.csv"
+    backfill_files = get_file_list(backfill_pattern)
+
+    daily_pattern = "s3://ibkr-flex-query-files/daily-files/*/*/*trades.csv"
+    daily_files = get_file_list(daily_pattern)
+
+    file_list = history_files + backfill_files + daily_files
+
+    # 2. Read, clean, and concatenate files
+    dfs = []
+    for file in file_list:
+        df = pl.read_csv(f"s3://{file}", storage_options=storage_options, infer_schema_length=10000)
+        df_clean = clean_trades_data(df)
+        dfs.append(df_clean)
+
+    df = pl.concat(dfs).unique()
+
+    # 3. Create core table if not exists
+    db = aws.RDS(
+        db_endpoint=os.getenv("DB_ENDPOINT"),
+        db_name=os.getenv("DB_NAME"),
+        db_user=os.getenv("DB_USER"),
+        db_password=os.getenv("DB_PASSWORD"),
+        db_port=os.getenv("DB_PORT"),
+    )
+    db.execute_sql_file('dags/sql/trades_create.sql')
+
+    # 4. Load into stage table
+    stage_table = "RELOAD_TRADES"
+    db.stage_dataframe(df, stage_table)
+
+    # 5. Merge into core table
+    db.execute_sql_template_file('dags/sql/trades_merge.sql', params={'stage_table': stage_table})
+
+    # 6. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
