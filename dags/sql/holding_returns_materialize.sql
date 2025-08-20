@@ -1,11 +1,13 @@
-INSERT INTO returns (
-    report_date,
+INSERT INTO holding_returns (
+    date,
     client_account_id,
-    symbol,
+    ticker,
     weight,
     shares,
-    close,
+    price,
+    value,
     return,
+    dividends,
     dividends_per_share
 )
 WITH positions AS (
@@ -96,32 +98,37 @@ adjustments AS(
 returns AS(
     SELECT
         client_account_id,
-        report_date,
-        symbol,
+        report_date AS date,
+        symbol AS ticker,
         (shares_1 * price_1) / SUM(shares_1 * price_1) OVER (PARTITION BY client_account_id, report_date) AS weight,
         shares_1 AS shares,
-        price_1 AS close,
+        price_1 AS price,
+        shares_1 * price_1 AS value,
         (shares_1_adj * price_1 - dividends) / (shares_0 * price_0) - 1 AS return,
+        dividends,
         dividends_per_share
     FROM adjustments a
     INNER JOIN calendar_new c ON a.report_date = c.date
 )
 SELECT 
-    report_date,
+    date,
     client_account_id,
-    symbol,
+    ticker,
     weight,
     shares,
-    close,
+    price,
+    value,
     return,
+    dividends,
     dividends_per_share
 FROM returns
-ORDER BY client_account_id, report_date, symbol
-ON CONFLICT (report_date, client_account_id, symbol)
+ON CONFLICT (date, client_account_id, ticker)
 DO UPDATE SET
-    weight = EXCLUDED.weight,
-    shares = EXCLUDED.shares,
-    close = EXCLUDED.close,
-    return = EXCLUDED.return,
+    weight = EXCLUDED.weight, 
+    shares = EXCLUDED.shares, 
+    price = EXCLUDED.price, 
+    value = EXCLUDED.value, 
+    return = EXCLUDED.return, 
+    dividends = EXCLUDED.dividends, 
     dividends_per_share = EXCLUDED.dividends_per_share
 ;

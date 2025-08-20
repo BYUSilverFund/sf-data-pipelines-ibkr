@@ -35,7 +35,7 @@ def dashboard_dag_daily():
     ]
 
 
-@dag(schedule=None, start_date=None)
+@dag(schedule=None, max_active_tasks=1)
 def dashboard_dag_backfill():
     @task
     def get_dates() -> dict[str, str]:
@@ -72,7 +72,7 @@ def dashboard_dag_backfill():
     ]
 
 
-@dag(schedule=None, max_active_tasks=1)
+@dag(schedule=None)
 def dashboard_dag_reload():
     [
         [s3_to_rds_reload(), calendar_etl_reload()] >> return_materializations_reload(),
