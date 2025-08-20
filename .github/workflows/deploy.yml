@@ -16,13 +16,13 @@ env:
   ECR_REPOSITORY: "silver-fund/data-pipeline-ibkr"
   ECR_REGISTRY: "673541324313.dkr.ecr.us-west-2.amazonaws.com"
   ECS_CLUSTER_NAME: "ibkr-data-processing"
-  ECS_SERVICE_NAME: "airflow-service"
+  ECS_SERVICE_NAME: "airflow-task-def-service-2ro0mptn"
 
 permissions:
   contents: read
   id-token: write
 
-# Authenticates to AWS via IAM identity providers OIDC protocol
+# Authenticates to AWS via OIDC protocol found in IAM identity providers
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -40,29 +40,29 @@ jobs:
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Test Credentials
-        run: |
-          aws sts get-caller-identity
-
-      # - name: Login to Amazon ECR
-      #   id: login-ecr
-      #   uses: aws-actions/amazon-ecr-login@v2
-
-      # - name: Build and push Docker image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     push: true
-      #     tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
-
-      # - name: Update ECS service
+      # - name: Test Credentials
       #   run: |
-      #     aws ecs update-service \
-      #       --cluster ${{ env.ECS_CLUSTER_NAME }} \
-      #       --service ${{ env.ECS_SERVICE_NAME }} \
-      #       --force-new-deployment
+      #     aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER_NAME }} \
+            --service ${{ env.ECS_SERVICE_NAME }} \
+            --force-new-deployment
 
 # OLD TEMPLATE USING SECRET KEYS
 # jobs:
