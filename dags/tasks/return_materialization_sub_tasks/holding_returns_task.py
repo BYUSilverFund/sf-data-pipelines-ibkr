@@ -19,11 +19,11 @@ def holding_return_materializations_daily() -> None:
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/returns_create.sql')
+    db.execute_sql_file('dags/sql/holding_returns_create.sql')
 
     # 2. Materialize table
     db.execute_sql_template_file(
-        file_name='dags/sql/returns_materialize.sql',
+        file_name='dags/sql/holding_returns_materialize.sql',
         params={'start_date': last_market_date, 'end_date': last_market_date}
     )
 
@@ -37,11 +37,11 @@ def holding_return_materializations_backfill(from_date: dt.date, to_date: dt.dat
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/returns_create.sql')
+    db.execute_sql_file('dags/sql/holding_returns_create.sql')
 
     # 2. Materialize table
     db.execute_sql_template_file(
-        file_name='dags/sql/returns_materialize.sql',
+        file_name='dags/sql/holding_returns_materialize.sql',
         params={'start_date': from_date, 'end_date': to_date}
     )
 
@@ -58,10 +58,10 @@ def holding_return_materializations_reload() -> None:
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/returns_create.sql')
+    db.execute_sql_file('dags/sql/holding_returns_create.sql')
 
     # 2. Materialize table
     db.execute_sql_template_file(
-        file_name='dags/sql/returns_materialize.sql',
+        file_name='dags/sql/holding_returns_materialize.sql',
         params={'start_date': from_date, 'end_date': to_date}
     )

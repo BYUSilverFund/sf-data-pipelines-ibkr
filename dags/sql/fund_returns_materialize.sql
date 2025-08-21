@@ -1,7 +1,7 @@
 INSERT INTO fund_returns (
     date,
     client_account_id,
-    ending_value,
+    value,
     return,
     dividends
 )
@@ -20,16 +20,17 @@ WITH transform AS(
     FROM delta_nav_new
 )
 SELECT
-    date,
+    t.date,
     client_account_id,
-    ending_value - deposits_withdrawals AS ending_value,
+    ending_value - deposits_withdrawals AS value,
     (ending_value - deposits_withdrawals) / starting_value - 1 AS return,
     dividends
-FROM transform
-WHERE date BETWEEN '{{start_date}}' AND '{{end_date}}'
+FROM transform t
+INNER JOIN calendar_new c ON t.date = c.date
+WHERE t.date BETWEEN '{{start_date}}' AND '{{end_date}}'
 ON CONFLICT (date, client_account_id)
 DO UPDATE SET
-    ending_value = EXCLUDED.ending_value,
+    value = EXCLUDED.value,
     return = EXCLUDED.return,
     dividends = EXCLUDED.dividends
 ;

@@ -1,6 +1,6 @@
 INSERT INTO all_fund_returns (
     date,
-    ending_value,
+    value,
     return,
     dividends
 )
@@ -28,15 +28,16 @@ values AS(
     GROUP BY date
 )
 SELECT
-    date,
-    ending_value - deposits_withdrawals AS ending_value,
+    v.date,
+    ending_value - deposits_withdrawals AS value,
     (ending_value - deposits_withdrawals) / starting_value - 1 AS return,
     dividends
-FROM values
-WHERE date BETWEEN '{{start_date}}' AND '{{end_date}}'
+FROM values v
+INNER JOIN calendar_new c ON v.date = c.date
+WHERE v.date BETWEEN '{{start_date}}' AND '{{end_date}}'
 ON CONFLICT (date)
 DO UPDATE SET
-    ending_value = EXCLUDED.ending_value,
+    value = EXCLUDED.value,
     return = EXCLUDED.return,
     dividends = EXCLUDED.dividends
 ;
