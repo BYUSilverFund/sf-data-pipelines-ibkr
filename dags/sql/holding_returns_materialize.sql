@@ -6,6 +6,8 @@ INSERT INTO holding_returns (
     shares,
     price,
     value,
+    shares_traded,
+    average_trade_price,
     return,
     dividends,
     dividends_per_share
@@ -49,6 +51,7 @@ trades AS(
     WHERE sub_category IN ('ETF', 'COMMON')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
+    HAVING SUM(quantity) != 0
 ),
 merge AS(
     SELECT
@@ -82,15 +85,31 @@ adjustments AS(
         side,
         shares_0,
         shares_1,
+        shares_traded,
+        average_trade_price,
         (
             CASE
                 WHEN shares_1 - shares_traded = 0 -- Initial trade
                 THEN shares_1
-                ELSE shares_1 - shares_traded -- Subtract off traded shares
+                WHEN shares_1 BETWEEN -1 and 1-- Exit trade
+                THEN shares_0
+                ELSE shares_1 - shares_traded -- Trim positions
             END
         ) AS shares_1_adj,
-        price_0 * fx_rate_0 AS price_0,
-        price_1 * fx_rate_1 AS price_1,
+        (
+            CASE
+                WHEN shares_1 - shares_traded = 0 -- Initial trade
+                THEN average_trade_price * fx_rate_0
+                ELSE price_0 * fx_rate_0
+            END
+        ) AS price_0,
+        (
+            CASE
+                WHEN shares_1 BETWEEN -1 and 1-- Exit trade
+                THEN average_trade_price * fx_rate_1
+                ELSE price_1 * fx_rate_1
+            END
+        ) AS price_1,
         dividends,
         dividends_per_share
     FROM merge
@@ -101,10 +120,12 @@ returns AS(
         report_date AS date,
         symbol AS ticker,
         (shares_1 * price_1) / SUM(shares_1 * price_1) OVER (PARTITION BY client_account_id, report_date) AS weight,
-        shares_1 AS shares,
+        shares_1_adj AS shares,
         price_1 AS price,
         shares_1 * price_1 AS value,
-        (shares_1_adj * price_1 - dividends) / (shares_0 * price_0) - 1 AS return,
+        shares_traded,
+        average_trade_price,
+        (shares_1_adj * price_1 + dividends) / (shares_0 * price_0) - 1 AS return,
         dividends,
         dividends_per_share
     FROM adjustments a
@@ -118,6 +139,8 @@ SELECT
     shares,
     price,
     value,
+    shares_traded,
+    average_trade_price,
     return,
     dividends,
     dividends_per_share
@@ -128,6 +151,8 @@ DO UPDATE SET
     shares = EXCLUDED.shares, 
     price = EXCLUDED.price, 
     value = EXCLUDED.value, 
+    shares_traded = EXCLUDED.shares_traded,
+    average_trade_price = EXCLUDED.average_trade_price,
     return = EXCLUDED.return, 
     dividends = EXCLUDED.dividends, 
     dividends_per_share = EXCLUDED.dividends_per_share
