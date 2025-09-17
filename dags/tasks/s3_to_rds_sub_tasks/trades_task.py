@@ -52,7 +52,7 @@ def clean_trades_data(df: pl.DataFrame) -> pl.DataFrame:
             pl.col('buy_sell').is_in(['BUY', 'SELL'])
         )
         .with_columns(
-            pl.col('report_date').str.strptime(pl.Date, "%Y%m%d"),
+            pl.col('report_date').cast(pl.String).str.strptime(pl.Date, "%Y%m%d"),
         )
         .cast(trades_schema)
     )
