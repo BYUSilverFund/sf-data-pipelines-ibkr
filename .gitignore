@@ -1,3 +1,9 @@
+# SSL certs
+/certbot
+
+# nginx configuration
+nginx.conf
+
 # Airflow
 /logs
 /archive

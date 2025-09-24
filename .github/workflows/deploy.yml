@@ -1,105 +1,68 @@
-name: Deploy Airflow to AWS ECS
+name: Deploy Airflow to EC2
 
 on:
   push:
     branches:
       - main
-    paths: # Only trigger on actual code changes
+    paths:
       - "dags/**"
       - "config/**"
-      - "requirements.txt"
-      - "Dockerfile"
+      - "docker-compose.yaml"
       - ".github/workflows/deploy.yml"
 
 env:
+  INSTANCE_NAME: "airflow"
   AWS_REGION: "us-west-2"
-  ECR_REPOSITORY: "silver-fund/data-pipeline-ibkr"
-  ECR_REGISTRY: "673541324313.dkr.ecr.us-west-2.amazonaws.com"
-  ECS_CLUSTER_NAME: "ibkr-data-processing"
-  ECS_SERVICE_NAME: "airflow-task-def-service-2ro0mptn"
 
 permissions:
   contents: read
   id-token: write
 
-# Authenticates to AWS via OIDC protocol found in IAM identity providers
 jobs:
-  build-and-deploy:
+  deploy-to-ec2:
     runs-on: ubuntu-latest
+
     steps:
+      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+      # Step 2: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::673541324313:role/sf-data-pipeline-ibkr-CI-CD
+          role-to-assume: arn:aws:iam::673541324313:role/sf-data-pipeline-ibkr-CI-CD # Replace with your IAM role
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
-      # - name: Test Credentials
-      #   run: |
-      #     aws sts get-caller-identity
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Update ECS service
+      # Step 3: Start the EC2 instance (if stopped)
+      - name: Start EC2 instance
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER_NAME }} \
-            --service ${{ env.ECS_SERVICE_NAME }} \
-            --force-new-deployment
+          aws ec2 start-instances --instance-name ${{ env.EC2_NAME }} --region ${{ env.AWS_REGION }}
+          aws ec2 wait instance-running --instance-name ${{ env.EC2_NAME }} --region ${{ env.AWS_REGION }}
 
-# OLD TEMPLATE USING SECRET KEYS
-# jobs:
-#   build-and-deploy:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v3
+      # Step 4: Copy DAGs, configs, and docker-compose.yaml to EC2
+      - name: Copy files to EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }} # Add your EC2 private key as a GitHub secret
+          HOST: ${{ secrets.EC2_HOST }} # Add your EC2 public IP or hostname as a GitHub secret
+          USER: ${{ secrets.EC2_USER }} # Add your EC2 SSH user as a GitHub secret
+        run: |
+          echo "$PRIVATE_KEY" > key.pem
+          chmod 600 key.pem
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./dags $USER@$HOST:~/airflow-project/dags
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./config $USER@$HOST:~/airflow-project/config
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./docker-compose.yaml $USER@$HOST:~/airflow-project/
 
-#       - name: Configure AWS credentials (using secrets)
-#         uses: aws-actions/configure-aws-credentials@v1.7.0
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ env.AWS_REGION }}
-
-#       - name: Sts GetCallerIdentity
-#         run: |
-#           aws sts get-caller-identity
-
-#       - name: Build Docker image
-#         run: |
-#           docker build -t ${{ secrets.ECR_REPOSITORY }}:latest .
-
-#       - name: Tag Docker image
-#         run: |
-#           docker tag ${{ secrets.ECR_REPOSITORY }}:latest ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
-
-#       - name: Push Docker image to ECR
-#         run: |
-#           docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
-
-#       - name: Update ECS service to use new image
-#         env:
-#           AWS_REGION: ${{ env.AWS_REGION }}
-#           CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
-#           SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
-#           IMAGE_URI: ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY }}:latest
-#         run: |
-#           aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --force-new-deployment
+      # Step 5: Restart Airflow on EC2
+      - name: Restart Airflow
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no $USER@$HOST "
+            cd ~/airflow-project
+            docker compose down
+            docker compose up --build -d
+          "
