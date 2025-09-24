@@ -5,29 +5,34 @@ INSERT INTO fund_returns (
     return,
     dividends
 )
-WITH transform AS(
+WITH filter AS(
     SELECT
-        date,
+        d.date,
         client_account_id,
-        CASE
-            WHEN starting_value = 0
-            THEN ending_value
-            ELSE starting_value
-        END AS starting_value,
         ending_value,
         deposits_withdrawals,
         dividends
-    FROM delta_nav_new
+    FROM delta_nav_new d
+    INNER JOIN calendar_new c ON d.date = c.date
+),
+transform AS(
+    SELECT
+        date,
+        client_account_id,
+        COALESCE(LAG(ending_value) OVER (PARTITION BY client_account_id ORDER BY date), ending_value) AS starting_value,
+        ending_value,
+        deposits_withdrawals,
+        dividends
+    FROM filter
 )
 SELECT
-    t.date,
+    date,
     client_account_id,
     ending_value - deposits_withdrawals AS value,
     (ending_value - deposits_withdrawals) / starting_value - 1 AS return,
     dividends
-FROM transform t
-INNER JOIN calendar_new c ON t.date = c.date
-WHERE t.date BETWEEN '{{start_date}}' AND '{{end_date}}'
+FROM transform
+WHERE date BETWEEN '{{start_date}}' AND '{{end_date}}'
 ON CONFLICT (date, client_account_id)
 DO UPDATE SET
     value = EXCLUDED.value,

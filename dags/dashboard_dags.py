@@ -25,7 +25,7 @@ from tasks.return_materialization_tasks import (
 )
 
 
-@dag(schedule="@daily", max_active_tasks=1)
+@dag(schedule="0 8 * * *", max_active_tasks=1)
 def dashboard_dag_daily():
     [
         [ibkr_to_s3_daily() >> s3_to_rds_daily(), calendar_etl_daily()]
