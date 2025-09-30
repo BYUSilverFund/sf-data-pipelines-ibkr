@@ -11,7 +11,7 @@ on:
       - ".github/workflows/deploy.yml"
 
 env:
-  INSTANCE_NAME: "airflow"
+  INSTANCE_ID: "i-0f886fb3f9553d527"
   AWS_REGION: "us-west-2"
 
 permissions:
@@ -31,38 +31,25 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::673541324313:role/sf-data-pipeline-ibkr-CI-CD # Replace with your IAM role
+          role-to-assume: arn:aws:iam::YOUR_ACCOUNT_ID:role/GitHubActions-AirflowDeployment-Role
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
       # Step 3: Start the EC2 instance (if stopped)
       - name: Start EC2 instance
         run: |
-          aws ec2 start-instances --instance-name ${{ env.EC2_NAME }} --region ${{ env.AWS_REGION }}
-          aws ec2 wait instance-running --instance-name ${{ env.EC2_NAME }} --region ${{ env.AWS_REGION }}
+          aws ec2 start-instances --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
+          aws ec2 wait instance-running --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
 
-      # Step 4: Copy DAGs, configs, and docker-compose.yaml to EC2
-      - name: Copy files to EC2
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }} # Add your EC2 private key as a GitHub secret
-          HOST: ${{ secrets.EC2_HOST }} # Add your EC2 public IP or hostname as a GitHub secret
-          USER: ${{ secrets.EC2_USER }} # Add your EC2 SSH user as a GitHub secret
+      # Step 4: Deploy via Git Pull and Restart Airflow
+      - name: Deploy and restart Airflow via SSM
         run: |
-          echo "$PRIVATE_KEY" > key.pem
-          chmod 600 key.pem
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./dags $USER@$HOST:~/airflow-project/dags
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./config $USER@$HOST:~/airflow-project/config
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" ./docker-compose.yaml $USER@$HOST:~/airflow-project/
-
-      # Step 5: Restart Airflow on EC2
-      - name: Restart Airflow
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          HOST: ${{ secrets.EC2_HOST }}
-          USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no $USER@$HOST "
-            cd ~/airflow-project
-            docker compose down
-            docker compose up --build -d
-          "
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=InstanceIds,Values=${{ env.INSTANCE_ID }}" \
+            --parameters 'commands=[
+              "cd /home/ec2-user/airflow",
+              "git pull origin main",
+              "docker compose down",
+              "docker compose up --build -d"
+            ]'
