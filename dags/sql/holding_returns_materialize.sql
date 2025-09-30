@@ -22,7 +22,7 @@ WITH positions AS (
         mark_price AS price_1,
         CASE WHEN quantity > 0 THEN 1 ELSE -1 END AS side
     FROM positions_new
-    WHERE sub_category IN ('ETF', 'COMMON')
+    WHERE sub_category IN ('ETF', 'COMMON', 'ADR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
 ),
 dividends AS(
@@ -33,7 +33,7 @@ dividends AS(
         SUM(net_amount) AS dividends,
         SUM(gross_rate) AS dividends_per_share
     FROM dividends_new
-    WHERE sub_category IN ('ETF', 'COMMON')
+    WHERE sub_category IN ('ETF', 'COMMON', 'ADR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
 ),
@@ -45,7 +45,7 @@ trades AS(
         SUM(quantity) AS shares_traded,
         SUM(quantity * trade_price) / SUM(quantity) AS average_trade_price
     FROM trades_new
-    WHERE sub_category IN ('ETF', 'COMMON')
+    WHERE sub_category IN ('ETF', 'COMMON', 'ATR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
     HAVING SUM(quantity) != 0
