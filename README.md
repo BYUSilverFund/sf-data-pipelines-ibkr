@@ -35,6 +35,18 @@ The reverse proxy is an Nginx server running in a Docker container as part of th
 
 #### TLS Certificate Management:
 
+##### Local Development
+
+For local development, generate self-signed certificates using OpenSSL:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
+```
+
+After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/letsencrypt/live/airflow.silverfund.byu.edu-0001/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
+
+##### Production
+
 To issue certificates using Certbot, run the following command (one time setup):
 
 ```bash
@@ -70,4 +82,4 @@ the above command is ran daily using a systemd timer on the EC2 instance.
 
 - Let's Encrypt's Certbot does not issue certificates for local testing because it requires a publicly resolvable domain name to verify ownership. However, for local testing, you can generate certificates using self-signed certificates.
 - On the production server, the Certbot container will manage certificates.
-- For development, use OpenSSL to create certificates and place them in `/certbot/www` (or the directory defined in the `docker-compose.yaml` file under the Nginx service volumes).
+- For local development, you will need to use OpenSSL to create certificates. Alternatively, you can comment out the SSL server section in your `nginx.conf` file, or simply exclude the Nginx and Certbot containers from your Docker Compose setup. These components are only required for production environments where HTTPS and certificate management are necessary.

@@ -1,5 +1,6 @@
 # SSL certs
 /certbot
+/data
 
 # nginx configuration
 nginx.conf
