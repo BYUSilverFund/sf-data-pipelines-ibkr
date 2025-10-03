@@ -2,9 +2,6 @@
 /certbot
 /data
 
-# nginx configuration
-nginx.conf
-
 # Airflow
 /logs
 /archive

@@ -1,14 +1,12 @@
-name: Deploy Airflow to EC2
+name: Smart Airflow Deploy
 
 on:
   push:
     branches:
       - main
-    paths:
-      - "dags/**"
-      - "config/**"
-      - "docker-compose.yaml"
-      - ".github/workflows/deploy.yml"
+    paths-ignore:
+      - "README.md"
+      - "README"
 
 env:
   INSTANCE_ID: "i-0f886fb3f9553d527"
@@ -23,11 +21,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Configure AWS credentials
+      - name: Get changed files
+        id: changes
+        run: |
+          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
+          git fetch origin main
+          git diff --name-only origin/main...HEAD >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Set deploy action
+        id: deploy_action
+        run: |
+          # Default: do nothing
+          ACTION="none"
+          # If Dockerfile, requirements.txt, or docker-compose.yaml changed: full rebuild
+          if echo "$CHANGED_FILES" | grep -E '(^|/)(Dockerfile|requirements.txt|docker-compose.yaml)$'; then
+            ACTION="full"
+          # If config changed: restart
+          elif echo "$CHANGED_FILES" | grep -E '^config/'; then
+            ACTION="restart"
+          # If only dags changed: no action
+          elif echo "$CHANGED_FILES" | grep -E '^dags/'; then
+            ACTION="none"
+          fi
+          echo "deploy_action=$ACTION" >> $GITHUB_OUTPUT
+        env:
+          CHANGED_FILES: ${{ env.CHANGED_FILES }}
+
+      - name: Log files and action
+        run: |
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo "Determined action: ${{ steps.deploy_action.outputs.deploy_action }}"
+        env:
+          CHANGED_FILES: ${{ env.CHANGED_FILES }}
+
+      # Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -35,22 +67,29 @@ jobs:
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: Start the EC2 instance (if stopped)
+      # Start the EC2 instance (if stopped)
       - name: Start EC2 instance
         run: |
           aws ec2 start-instances --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
           aws ec2 wait instance-running --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
 
-      # Step 4: Deploy via Git Pull and Restart Airflow
-      - name: Deploy and restart Airflow via SSM
+      - name: Deploy via SSM
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=InstanceIds,Values=${{ env.INSTANCE_ID }}" \
             --parameters 'commands=[
+              "mkdir -p /home/ec2-user/airflow",
               "cd /home/ec2-user/airflow",
+              "yum install -y git",
+              "git init",
+              "git remote add origin https://github.com/BYUSilverFund/sf-data-pipelines-ibkr.git",
+              "git remote set-url --push origin no_push",
+              "git fetch origin",
               "git reset --hard",
-              "git pull origin main",
-              "docker-compose down",
-              "docker-compose up --build -d"
+              "yum install -y docker",
+              "systemctl start docker",
+              "systemctl enable docker",
+              "chmod +x deploy.sh",
+              "bash ./deploy.sh ${{ steps.deploy_action.outputs.deploy_action}}"
             ]'

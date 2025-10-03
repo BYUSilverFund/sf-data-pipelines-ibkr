@@ -83,3 +83,7 @@ the above command is ran daily using a systemd timer on the EC2 instance.
 - Let's Encrypt's Certbot does not issue certificates for local testing because it requires a publicly resolvable domain name to verify ownership. However, for local testing, you can generate certificates using self-signed certificates.
 - On the production server, the Certbot container will manage certificates.
 - For local development, you will need to use OpenSSL to create certificates. Alternatively, you can comment out the SSL server section in your `nginx.conf` file, or simply exclude the Nginx and Certbot containers from your Docker Compose setup. These components are only required for production environments where HTTPS and certificate management are necessary.
+
+#### Infrastructure
+
+Airflow is hosted on an ec2 (named airflow). This ec2 is not managed by Terraform and does not have a dev environment. env vars are configured directly on the ec2 from the AWS console (or CLI)

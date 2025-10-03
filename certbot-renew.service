@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew Certbot certificates
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ec2-user/airflow
+ExecStart=/usr/local/bin/docker-compose run --rm certbot renew
+ExecStartPost=/usr/local/bin/docker-compose -f /home/ec2-user/airflow/docker-compose.yaml exec -T nginx nginx -s reload
