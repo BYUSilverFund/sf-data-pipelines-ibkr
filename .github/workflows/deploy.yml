@@ -58,7 +58,7 @@ jobs:
               "systemctl enable docker",
               "docker-compose down",
               "docker-compose up --build -d",
-              "docker-compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu",
+              "docker-compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu --non-interactive --agree-tos --installer nginx",
               "if ! cmp -s /home/ec2-user/airflow/certbot-renew.service /etc/systemd/system/certbot-renew.service || \
                 ! cmp -s /home/ec2-user/airflow/certbot-renew.timer /etc/systemd/system/certbot-renew.timer; 
               then \
