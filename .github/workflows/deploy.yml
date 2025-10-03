@@ -28,9 +28,12 @@ jobs:
         id: changes
         run: |
           echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
-          git fetch origin main
-          git diff --name-only origin/main...HEAD >> $GITHUB_ENV
+          git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || true >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+          echo "Changed files:"
+          cat $GITHUB_ENV
+        env:
+          GITHUB_ENV: ${{ github.env }}
 
       - name: Set deploy action
         id: deploy_action
@@ -48,14 +51,7 @@ jobs:
             ACTION="none"
           fi
           echo "deploy_action=$ACTION" >> $GITHUB_OUTPUT
-        env:
-          CHANGED_FILES: ${{ env.CHANGED_FILES }}
-
-      - name: Log files and action
-        run: |
-          echo "Changed files:"
-          echo ${{ env.CHANGED_FILES }}
-          echo "Determined action: ${{ steps.deploy_action.outputs.deploy_action }}"
+          echo "Determined action: $ACTION"
         env:
           CHANGED_FILES: ${{ env.CHANGED_FILES }}
 
