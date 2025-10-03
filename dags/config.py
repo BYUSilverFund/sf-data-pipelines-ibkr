@@ -1,5 +1,4 @@
 import datetime as dt
-# test file change
 configs = [
     {
         "fund": "grad",
