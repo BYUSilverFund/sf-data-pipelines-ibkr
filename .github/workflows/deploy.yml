@@ -24,80 +24,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Get changed files
-        id: changes
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::673541324313:role/Airflow-CI-CD
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Start the EC2 instance (if stopped)
+      - name: Start EC2 instance
         run: |
-          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
-          git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || true >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          echo "Changed files:"
-          cat $GITHUB_ENV
-        env:
-          GITHUB_ENV: ${{ github.env }}
+          aws ec2 start-instances --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
+          aws ec2 wait instance-running --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
 
-      - name: Set deploy action
-        id: deploy_action
+      - name: Deploy via SSM
         run: |
-          # Default: do nothing
-          ACTION="none"
-          # If Dockerfile, requirements.txt, or docker-compose.yaml changed: full rebuild
-          if echo "$CHANGED_FILES" | grep -E '(^|/)(Dockerfile|requirements.txt|docker-compose.yaml)$'; then
-            ACTION="full"
-          # If config changed: restart
-          elif echo "$CHANGED_FILES" | grep -E '^config/'; then
-            ACTION="restart"
-          # If only dags changed: no action
-          elif echo "$CHANGED_FILES" | grep -E '^dags/'; then
-            ACTION="none"
-          fi
-          echo "deploy_action=$ACTION" >> $GITHUB_OUTPUT
-          echo "Determined action: $ACTION"
-        env:
-          CHANGED_FILES: ${{ env.CHANGED_FILES }}
-
-      # # Configure AWS credentials
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     role-to-assume: arn:aws:iam::673541324313:role/Airflow-CI-CD
-      #     role-session-name: GitHub_to_AWS_via_FederatedOIDC
-      #     aws-region: ${{ env.AWS_REGION }}
-
-      # # Start the EC2 instance (if stopped)
-      # - name: Start EC2 instance
-      #   run: |
-      #     aws ec2 start-instances --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
-      #     aws ec2 wait instance-running --instance-ids ${{ env.INSTANCE_ID }} --region ${{ env.AWS_REGION }}
-
-      # - name: Deploy via SSM
-      #   run: |
-      #     aws ssm send-command \
-      #       --document-name "AWS-RunShellScript" \
-      #       --targets "Key=InstanceIds,Values=${{ env.INSTANCE_ID }}" \
-      #       --parameters 'commands=[
-      #         "mkdir -p /home/ec2-user/airflow",
-      #         "cd /home/ec2-user/airflow",
-      #         "yum install -y git",
-      #         "git init",
-      #         "git config --global --add safe.directory /home/ec2-user/airflow",
-      #         "git remote add origin https://github.com/BYUSilverFund/sf-data-pipelines-ibkr.git",
-      #         "git remote set-url --push origin no_push",
-      #         "git fetch origin",
-      #         "git reset --hard",
-      #         "yum install -y docker",
-      #         "systemctl start docker",
-      #         "systemctl enable docker",
-      #         "ACTION=${{ steps.deploy_action.outputs.deploy_action }}",
-      #           "if [ \"$ACTION\" = \"full\" ]; then set -e; docker-compose down; docker-compose up --build -d; \
-      #         elif [ \"$ACTION\" = \"restart\" ]; then set -e; docker-compose restart; \
-      #         elif [ \"$ACTION\" = \"none\" ]; then echo \"Only DAGs changed; no container restart needed.\"; \
-      #         else echo \"Unknown action: $ACTION\"; exit 1; fi",
-      #           "docker-compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu",
-      #           "if ! cmp -s /home/ec2-user/airflow/certbot-renew.service /etc/systemd/system/certbot-renew.service || \
-      #         ! cmp -s /home/ec2-user/airflow/certbot-renew.timer /etc/systemd/system/certbot-renew.timer; then \
-      #         cp /home/ec2-user/airflow/certbot-renew.service /etc/systemd/system/certbot-renew.service; \
-      #         cp /home/ec2-user/airflow/certbot-renew.timer /etc/systemd/system/certbot-renew.timer; \
-      #         systemctl daemon-reload; systemctl enable --now certbot-renew.timer; \
-      #         echo \"Systemd unit files updated and timer enabled.\"; \
-      #         else echo \"No changes to systemd unit files; skipping reload.\"; fi"
-      #       ]'
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=InstanceIds,Values=${{ env.INSTANCE_ID }}" \
+            --parameters 'commands=[
+              "mkdir -p /home/ec2-user/airflow",
+              "cd /home/ec2-user/airflow",
+              "yum install -y git",
+              "git init",
+              "git config --global --add safe.directory /home/ec2-user/airflow",
+              "git remote add origin https://github.com/BYUSilverFund/sf-data-pipelines-ibkr.git",
+              "git remote set-url --push origin no_push",
+              "git fetch origin",
+              "git reset --hard",
+              "yum install -y docker",
+              "systemctl start docker",
+              "systemctl enable docker",
+              "docker-compose down",
+              "docker-compose up --build -d",
+              "docker-compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu",
+              "if ! cmp -s /home/ec2-user/airflow/certbot-renew.service /etc/systemd/system/certbot-renew.service || \
+                ! cmp -s /home/ec2-user/airflow/certbot-renew.timer /etc/systemd/system/certbot-renew.timer; 
+              then \
+                cp /home/ec2-user/airflow/certbot-renew.service /etc/systemd/system/certbot-renew.service; \
+                cp /home/ec2-user/airflow/certbot-renew.timer /etc/systemd/system/certbot-renew.timer; \
+                systemctl daemon-reload; systemctl enable --now certbot-renew.timer; \
+                echo \"Systemd unit files updated and timer enabled.\"; \
+              else \
+                echo \"No changes to systemd unit files; skipping certbot timer reload.\"; \
+              fi"
+            ]'
