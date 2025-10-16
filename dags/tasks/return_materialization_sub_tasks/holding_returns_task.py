@@ -9,8 +9,9 @@ import config
 @task(task_id="holding_return_materializations")
 def holding_return_materializations_daily() -> None:
     yesterday = dt.date.today() - du.relativedelta(days=1)
-    last_market_date = tools.get_last_market_date(reference_date=yesterday) 
-    
+    end_date = tools.get_last_market_date(reference_date=yesterday) 
+    start_date = end_date - du.relativedelta(days=7)
+
     # 1. Create core table if not exists
     db = aws.RDS(
         db_endpoint=os.getenv("DB_ENDPOINT"),
@@ -24,7 +25,7 @@ def holding_return_materializations_daily() -> None:
     # 2. Materialize table
     db.execute_sql_template_file(
         file_name='dags/sql/holding_returns_materialize.sql',
-        params={'start_date': last_market_date, 'end_date': last_market_date}
+        params={'start_date': start_date, 'end_date': end_date}
     )
 
 @task(task_id="holding_return_materializations")

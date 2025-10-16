@@ -45,7 +45,7 @@ trades AS(
         SUM(quantity) AS shares_traded,
         SUM(quantity * trade_price) / SUM(quantity) AS average_trade_price
     FROM trades_new
-    WHERE sub_category IN ('ETF', 'COMMON', 'ATR')
+    WHERE sub_category IN ('ETF', 'COMMON', 'ADR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
     HAVING SUM(quantity) != 0
@@ -169,6 +169,7 @@ SELECT
     dividends,
     dividends_per_share
 FROM returns
+WHERE date != '{{start_date}}'
 ON CONFLICT (date, client_account_id, ticker)
 DO UPDATE SET
     weight = EXCLUDED.weight, 
