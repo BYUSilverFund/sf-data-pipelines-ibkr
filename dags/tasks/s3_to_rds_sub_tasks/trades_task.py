@@ -66,7 +66,7 @@ def trades_transform_and_load_daily():
     source_pattern = f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-trades.csv"
 
     storage_options = {
-        "key": os.getenv('COGNITO_ACCESS_KEY_ID'),
+        "key": os.getenv('USER_ACCESS_KEY_ID'),
         "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
     }
 
@@ -107,7 +107,7 @@ def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-trades.csv"
 
     storage_options = {
-        "key": os.getenv('COGNITO_ACCESS_KEY_ID'),
+        "key": os.getenv('USER_ACCESS_KEY_ID'),
         "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
     }\
 
@@ -146,7 +146,7 @@ def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
 def trades_transform_and_load_reload():
     # 1. Get all files in S3
     storage_options = {
-        "key": os.getenv('COGNITO_ACCESS_KEY_ID'),
+        "key": os.getenv('USER_ACCESS_KEY_ID'),
         "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
     }
 

@@ -24,9 +24,9 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
 
     # 2. Save to S3
     s3 = aws.S3(
-        aws_access_key_id=os.getenv('COGNITO_ACCESS_KEY_ID'),
+        aws_access_key_id=os.getenv('USER_ACCESS_KEY_ID'),
         aws_secret_access_key=os.getenv('COGNITO_SECRET_ACCESS_KEY'),
-        region_name=os.getenv('COGNITO_REGION'),
+        region_name=os.getenv('REGION'),
     )
 
     file_name = f"daily-files/{last_market_date}/{config['fund']}/{last_market_date}-{config['fund']}-{query}.csv"
@@ -45,9 +45,9 @@ def extract_and_store_task_backfill(config: dict, query: str, from_date: dt.date
 
     # 2. Save to S3
     s3 = aws.S3(
-        aws_access_key_id=os.getenv('COGNITO_ACCESS_KEY_ID'),
+        aws_access_key_id=os.getenv('USER_ACCESS_KEY_ID'),
         aws_secret_access_key=os.getenv('COGNITO_SECRET_ACCESS_KEY'),
-        region_name=os.getenv('COGNITO_REGION'),
+        region_name=os.getenv('REGION'),
     )
 
     file_name = f"backfill-files/{from_date}_{to_date}/{config['fund']}/{from_date}_{to_date}-{config['fund']}-{query}.csv"
