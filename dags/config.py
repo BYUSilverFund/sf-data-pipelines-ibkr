@@ -1,4 +1,3 @@
-# testing comment 1
 import datetime as dt
 configs = [
     {

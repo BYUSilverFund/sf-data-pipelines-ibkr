@@ -3,7 +3,7 @@ name: Smart Airflow Deploy
 on:
   push:
     branches:
-      - prod
+      - main
     paths-ignore:
       - "README.md"
       - "README"
