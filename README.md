@@ -43,7 +43,7 @@ For local development, generate self-signed certificates using OpenSSL:
 openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
 ```
 
-After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/letsencrypt/live/airflow.silverfund.byu.edu-0001/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
+After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/letsencrypt/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
 
 ##### Production
 
