@@ -25,7 +25,7 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
     # 2. Save to S3
     s3 = aws.S3(
         aws_access_key_id=os.getenv('USER_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+        aws_secret_access_key=os.getenv('USER_SECRET_ACCESS_KEY'),
         region_name=os.getenv('REGION'),
     )
 
@@ -46,7 +46,7 @@ def extract_and_store_task_backfill(config: dict, query: str, from_date: dt.date
     # 2. Save to S3
     s3 = aws.S3(
         aws_access_key_id=os.getenv('USER_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+        aws_secret_access_key=os.getenv('USER_SECRET_ACCESS_KEY'),
         region_name=os.getenv('REGION'),
     )
 

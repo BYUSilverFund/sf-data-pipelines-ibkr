@@ -61,7 +61,7 @@ def delta_nav_transform_and_load_daily():
 
     storage_options = {
         "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
     }
 
     fs = fsspec.filesystem("s3", **storage_options)
@@ -102,7 +102,7 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
 
     storage_options = {
         "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
     }
 
     fs = fsspec.filesystem("s3", **storage_options)
@@ -141,7 +141,7 @@ def delta_nav_transform_and_load_reload():
     # 1. Get all files in S3
     storage_options = {
         "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('COGNITO_SECRET_ACCESS_KEY'),
+        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
     }
 
     def get_file_list(source_pattern: str) -> list[str]:
