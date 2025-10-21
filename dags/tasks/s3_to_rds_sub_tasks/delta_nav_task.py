@@ -1,55 +1,60 @@
-import tools
 import datetime as dt
-import dateutil.relativedelta as du
-import aws
 import os
-import polars as pl
-import fsspec
+
+import aws
+import dateutil.relativedelta as du
 import dotenv
+import fsspec
+import polars as pl
+import tools
 from airflow.sdk import task
+
 
 dotenv.load_dotenv(override=True)
 
+
 def clean_delta_nav_data(df: pl.DataFrame) -> pl.DataFrame:
     delta_nav_column_mapping = {
-        'FromDate': 'from_date',
-        'ToDate': 'to_date',
-        'ClientAccountID': 'client_account_id',
-        'StartingValue': 'starting_value',
-        'EndingValue': 'ending_value',
-        'DepositsWithdrawals': 'deposits_withdrawals',
-        'Dividends': 'dividends'
+        "FromDate": "from_date",
+        "ToDate": "to_date",
+        "ClientAccountID": "client_account_id",
+        "StartingValue": "starting_value",
+        "EndingValue": "ending_value",
+        "DepositsWithdrawals": "deposits_withdrawals",
+        "Dividends": "dividends",
     }
 
     delta_nav_schema = {
-        'from_date': pl.Date,
-        'to_date': pl.Date,
-        'client_account_id': pl.String,
-        'starting_value': pl.Float64,
-        'ending_value': pl.Float64,
-        'deposits_withdrawals': pl.Float64,
-        'dividends': pl.Float64
+        "from_date": pl.Date,
+        "to_date": pl.Date,
+        "client_account_id": pl.String,
+        "starting_value": pl.Float64,
+        "ending_value": pl.Float64,
+        "deposits_withdrawals": pl.Float64,
+        "dividends": pl.Float64,
     }
 
     return (
-        df
-        .filter(pl.col('ClientAccountID').ne('ClientAccountID'))
+        df.filter(pl.col("ClientAccountID").ne("ClientAccountID"))
         .select(delta_nav_column_mapping.keys())
         .rename(delta_nav_column_mapping)
         .with_columns(
-            pl.col('from_date', 'to_date').cast(pl.String).str.strptime(pl.Date, "%Y%m%d"),
+            pl.col("from_date", "to_date")
+            .cast(pl.String)
+            .str.strptime(pl.Date, "%Y%m%d"),
         )
-        .filter(pl.col('from_date').eq(pl.col('to_date')))
+        .filter(pl.col("from_date").eq(pl.col("to_date")))
         .cast(delta_nav_schema)
         .select(
-            pl.col('to_date').alias('date'),
-            'client_account_id',
-            'starting_value',
-            'ending_value',
-            'deposits_withdrawals',
-            'dividends'
+            pl.col("to_date").alias("date"),
+            "client_account_id",
+            "starting_value",
+            "ending_value",
+            "deposits_withdrawals",
+            "dividends",
         )
     )
+
 
 @task(task_id="delta_nav_transform_and_load")
 def delta_nav_transform_and_load_daily():
@@ -57,11 +62,13 @@ def delta_nav_transform_and_load_daily():
     last_market_date = tools.get_last_market_date(reference_date=yesterday)
 
     # 1. Process raw positions data
-    source_pattern = f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-delta_nav.csv"
+    source_pattern = (
+        f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-delta_nav.csv"
+    )
 
     storage_options = {
-        "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
+        "key": os.getenv("USER_ACCESS_KEY_ID"),
+        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
     }
 
     fs = fsspec.filesystem("s3", **storage_options)
@@ -69,7 +76,9 @@ def delta_nav_transform_and_load_daily():
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(f"s3://{file}", storage_options=storage_options, infer_schema_length=10000)
+        df = pl.read_csv(
+            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
+        )
         df_clean = clean_delta_nav_data(df)
         dfs.append(df_clean)
 
@@ -83,17 +92,20 @@ def delta_nav_transform_and_load_daily():
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/delta_nav_create.sql')
+    db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 3. Load into stage table
     stage_table = f"{last_market_date}_DELTA_NAV"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
-    db.execute_sql_template_file('dags/sql/delta_nav_merge.sql', params={'stage_table': stage_table})
+    db.execute_sql_template_file(
+        "dags/sql/delta_nav_merge.sql", params={"stage_table": stage_table}
+    )
 
     # 5. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
+
 
 @task(task_id="delta_nav_transform_and_load")
 def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
@@ -101,8 +113,8 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-delta_nav.csv"
 
     storage_options = {
-        "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
+        "key": os.getenv("USER_ACCESS_KEY_ID"),
+        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
     }
 
     fs = fsspec.filesystem("s3", **storage_options)
@@ -110,7 +122,9 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(f"s3://{file}", storage_options=storage_options, infer_schema_length=10000)
+        df = pl.read_csv(
+            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
+        )
         df_clean = clean_delta_nav_data(df)
         dfs.append(df_clean)
 
@@ -124,24 +138,27 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/delta_nav_create.sql')
+    db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 3. Load into stage table
     stage_table = f"{from_date}_{to_date}_DELTA_NAV"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
-    db.execute_sql_template_file('dags/sql/delta_nav_merge.sql', params={'stage_table': stage_table})
+    db.execute_sql_template_file(
+        "dags/sql/delta_nav_merge.sql", params={"stage_table": stage_table}
+    )
 
     # 5. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
+
 
 @task(task_id="delta_nav_transform_and_load")
 def delta_nav_transform_and_load_reload():
     # 1. Get all files in S3
     storage_options = {
-        "key": os.getenv('USER_ACCESS_KEY_ID'),
-        "secret": os.getenv('USER_SECRET_ACCESS_KEY'),
+        "key": os.getenv("USER_ACCESS_KEY_ID"),
+        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
     }
 
     def get_file_list(source_pattern: str) -> list[str]:
@@ -162,7 +179,9 @@ def delta_nav_transform_and_load_reload():
     # 2. Read, clean, and concatenate files
     dfs = []
     for file in file_list:
-        df = pl.read_csv(f"s3://{file}", storage_options=storage_options, infer_schema_length=10000)
+        df = pl.read_csv(
+            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
+        )
         df_clean = clean_delta_nav_data(df)
         dfs.append(df_clean)
 
@@ -176,14 +195,16 @@ def delta_nav_transform_and_load_reload():
         db_password=os.getenv("DB_PASSWORD"),
         db_port=os.getenv("DB_PORT"),
     )
-    db.execute_sql_file('dags/sql/delta_nav_create.sql')
+    db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 4. Load into stage table
     stage_table = "RELOAD_DELTA_NAV"
     db.stage_dataframe(df, stage_table)
 
     # 5. Merge into core table
-    db.execute_sql_template_file('dags/sql/delta_nav_merge.sql', params={'stage_table': stage_table})
+    db.execute_sql_template_file(
+        "dags/sql/delta_nav_merge.sql", params={"stage_table": stage_table}
+    )
 
     # 6. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
