@@ -5,9 +5,13 @@ on:
     branches:
       - dev
       - prod
+    paths-ignore:
+      - "README.md"
   push:
     branches:
       - dev
+    paths-ignore:
+      - "README.md"
 
 jobs:
   lint-and-format:
