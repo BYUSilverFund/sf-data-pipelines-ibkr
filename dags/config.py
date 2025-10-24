@@ -44,6 +44,17 @@ configs = [
             "trades": "1029498",
         }
     },
+    {
+        "fund": "quant_paper",
+        "token": "862681561565822535501422",
+        "queries": {
+            "nav": "1318734",
+            "delta_nav": "1318735",
+            "positions": "1318736",
+            "dividends": "1318737",
+            "trades": "1318746",
+        }
+    },
 ]
 
 min_date = dt.date(2020, 1, 1)

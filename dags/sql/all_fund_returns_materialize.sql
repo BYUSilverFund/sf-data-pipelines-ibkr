@@ -13,6 +13,7 @@ WITH filter AS(
         dividends
     FROM delta_nav_new d
     INNER JOIN calendar_new c ON d.date = c.date
+    WHERE client_account_id != 'DU8843649' -- Quant Paper Account
 ),
 transform AS(
     SELECT
