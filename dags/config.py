@@ -1,4 +1,6 @@
 import datetime as dt
+
+
 configs = [
     {
         "fund": "grad",
@@ -9,7 +11,7 @@ configs = [
             "positions": "993015",
             "dividends": "993011",
             "trades": "993012",
-        }
+        },
     },
     {
         "fund": "undergrad",
@@ -20,7 +22,7 @@ configs = [
             "positions": "989564",
             "dividends": "989565",
             "trades": "989567",
-        }
+        },
     },
     {
         "fund": "brigham_capital",
@@ -31,7 +33,7 @@ configs = [
             "positions": "989602",
             "dividends": "989603",
             "trades": "989605",
-        }
+        },
     },
     {
         "fund": "quant",
@@ -42,7 +44,7 @@ configs = [
             "positions": "1029501",
             "dividends": "1029496",
             "trades": "1029498",
-        }
+        },
     },
     {
         "fund": "quant_paper",

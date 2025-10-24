@@ -7,6 +7,8 @@ on:
     paths-ignore:
       - "README.md"
       - "README"
+      - "requirements-dev.txt"
+      - "pyproject.toml"
 
 env:
   INSTANCE_ID: "i-0f886fb3f9553d527"

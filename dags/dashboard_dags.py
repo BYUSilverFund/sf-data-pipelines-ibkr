@@ -1,28 +1,29 @@
-from airflow.sdk import dag, task, get_current_context
 import datetime as dt
+
 import dateutil.relativedelta as du
-from tasks.ibkr_to_s3_tasks import ibkr_to_s3_daily, ibkr_to_s3_backfill
-from tasks.s3_to_rds_tasks import s3_to_rds_daily, s3_to_rds_backfill, s3_to_rds_reload
+from airflow.sdk import dag, get_current_context, task
 from tasks.benchmark_tasks import (
-    benchmark_etl_daily,
     benchmark_etl_backfill,
+    benchmark_etl_daily,
     benchmark_etl_reload,
 )
-from tasks.risk_free_rate_tasks import (
-    risk_free_rate_etl_daily,
-    risk_free_rate_etl_backfill,
-    risk_free_rate_etl_reload,
-)
 from tasks.calendar_tasks import (
-    calendar_etl_daily,
     calendar_etl_backfill,
+    calendar_etl_daily,
     calendar_etl_reload,
 )
+from tasks.ibkr_to_s3_tasks import ibkr_to_s3_backfill, ibkr_to_s3_daily
 from tasks.return_materialization_tasks import (
-    return_materializations_daily,
     return_materializations_backfill,
+    return_materializations_daily,
     return_materializations_reload,
 )
+from tasks.risk_free_rate_tasks import (
+    risk_free_rate_etl_backfill,
+    risk_free_rate_etl_daily,
+    risk_free_rate_etl_reload,
+)
+from tasks.s3_to_rds_tasks import s3_to_rds_backfill, s3_to_rds_daily, s3_to_rds_reload
 
 
 @dag(schedule="0 8 * * *", max_active_tasks=1)

@@ -59,7 +59,7 @@ To renew certificates, run the following command:
 docker-compose run certbot renew
 ```
 
-the above command is ran daily using a systemd timer on the EC2 instance.
+the above ^^ command is ran daily using a systemd timer on the EC2 instance.
 
 - **List running timers:**
   ```bash
@@ -117,3 +117,35 @@ Deployment to the production EC2 instance is now **fully automated** using GitHu
 - Airflow is hosted on an EC2 instance (named `airflow`).
 - This EC2 is not managed by Terraform and does not have a dev environment.
 - Environment variables are configured directly on the EC2 from the AWS console or CLI.
+
+## Code Quality
+
+We use **Ruff** for both linting and formatting. Make sure to lint and format before pushing to Github. Github Actions is set up to fail ruff fails.
+
+### Format Code
+
+Format all Python files:
+
+```bash
+ruff format
+```
+
+Check formatting without making changes:
+
+```bash
+ruff format --check
+```
+
+### Lint Code
+
+Run linter:
+
+```bash
+ruff check
+```
+
+Auto-fix linting issues:
+
+```bash
+ruff check --fix
+```
