@@ -15,8 +15,8 @@ import config
 dotenv.load_dotenv(override=True)
 
 
-def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
-    series_id = "DGS10"
+def get_risk_free_rate() -> pl.DataFrame:
+    series_id = 'DGS10'
     api_key = os.getenv("FRED_API_KEY")
 
     fred = fredapi.Fred(api_key=api_key)
@@ -40,21 +40,21 @@ def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
             pl.col("price").truediv("price_lag").sub(1).alias("return"),
             pl.col("yield").truediv(360).alias("daily_yield"),
         )
-        .sort("date")
-        .with_columns(pl.col("return", "daily_yield").fill_null(strategy="backward"))
-        .filter(pl.col("date").is_between(start_date, end_date))
-        .sort("date")
-        .select("date", "return")
+        .sort('date')
+        .with_columns(
+            pl.col('return', 'daily_yield').fill_null(strategy='forward')
+        )
+        .sort('date')
+        .select('date', 'return')
     )
 
 
 @task(task_id="risk_free_rate_etl")
 def risk_free_rate_etl_daily() -> None:
-    yesterday = dt.date.today() - du.relativedelta(days=1)
-    last_market_date = tools.get_last_market_date(reference_date=yesterday)
+    today = dt.date.today()
 
     # 1. Get risk free rate data
-    df = get_risk_free_rate(last_market_date, last_market_date)
+    df = get_risk_free_rate()
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -67,7 +67,7 @@ def risk_free_rate_etl_daily() -> None:
     db.execute_sql_file("dags/sql/risk_free_rate_create.sql")
 
     # 3. Load into stage table
-    stage_table = f"{last_market_date}_RISK_FREE_RATE"
+    stage_table = f"{today}_RISK_FREE_RATE"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
