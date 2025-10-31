@@ -55,7 +55,7 @@ configs = [
             "positions": "1318736",
             "dividends": "1318737",
             "trades": "1318746",
-        }
+        },
     },
 ]
 

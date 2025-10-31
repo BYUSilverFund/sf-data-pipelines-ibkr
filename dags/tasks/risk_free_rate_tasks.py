@@ -2,11 +2,9 @@ import datetime as dt
 import os
 
 import aws
-import dateutil.relativedelta as du
 import dotenv
 import fredapi
 import polars as pl
-import tools
 from airflow.sdk import task
 
 import config
@@ -16,7 +14,7 @@ dotenv.load_dotenv(override=True)
 
 
 def get_risk_free_rate() -> pl.DataFrame:
-    series_id = 'DGS10'
+    series_id = "DGS10"
     api_key = os.getenv("FRED_API_KEY")
 
     fred = fredapi.Fred(api_key=api_key)
@@ -40,12 +38,10 @@ def get_risk_free_rate() -> pl.DataFrame:
             pl.col("price").truediv("price_lag").sub(1).alias("return"),
             pl.col("yield").truediv(360).alias("daily_yield"),
         )
-        .sort('date')
-        .with_columns(
-            pl.col('return', 'daily_yield').fill_null(strategy='forward')
-        )
-        .sort('date')
-        .select('date', 'return')
+        .sort("date")
+        .with_columns(pl.col("return", "daily_yield").fill_null(strategy="forward"))
+        .sort("date")
+        .select("date", "return")
     )
 
 
