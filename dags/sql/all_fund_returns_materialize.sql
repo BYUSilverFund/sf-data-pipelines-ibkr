@@ -38,7 +38,7 @@ values AS(
 SELECT
     date,
     ending_value - deposits_withdrawals AS value,
-    (ending_value - deposits_withdrawals) / starting_value - 1 AS return,
+     ((ending_value - deposits_withdrawals) / COALESCE(LAG(ending_value) OVER (ORDER BY date), ending_value)) - 1 AS return,
     dividends
 FROM values
 WHERE date BETWEEN '{{start_date}}' AND '{{end_date}}'
