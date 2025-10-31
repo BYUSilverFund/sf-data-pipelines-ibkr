@@ -13,7 +13,7 @@ import config
 dotenv.load_dotenv(override=True)
 
 
-def get_risk_free_rate() -> pl.DataFrame:
+def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
     series_id = "DGS10"
     api_key = os.getenv("FRED_API_KEY")
 
@@ -40,6 +40,7 @@ def get_risk_free_rate() -> pl.DataFrame:
         )
         .sort("date")
         .with_columns(pl.col("return", "daily_yield").fill_null(strategy="forward"))
+        .filter(pl.col("date").is_between(start_date, end_date))
         .sort("date")
         .select("date", "return")
     )
