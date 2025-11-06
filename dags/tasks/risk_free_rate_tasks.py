@@ -51,7 +51,7 @@ def risk_free_rate_etl_daily() -> None:
     today = dt.date.today()
 
     # 1. Get risk free rate data
-    df = get_risk_free_rate()
+    df = get_risk_free_rate(today, today)
 
     # 2. Create core table if not exists
     db = aws.RDS(
