@@ -6,6 +6,8 @@ import dotenv
 import fredapi
 import polars as pl
 from airflow.sdk import task
+import logging
+log = logging.getLogger(__name__)
 
 import config
 
