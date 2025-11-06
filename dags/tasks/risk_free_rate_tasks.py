@@ -54,11 +54,6 @@ def risk_free_rate_etl_daily() -> None:
 
     # 1. Get risk free rate data
     df = get_risk_free_rate(today, today)
-    log.info("risk_free_rate rows=%s", df.height)
-    try:
-        log.info("sample rows:\n%s", df.head(5).to_pandas())
-    except Exception:
-        log.exception("failed to log sample rows")
 
     # 2. Create core table if not exists
     db = aws.RDS(
