@@ -19,25 +19,26 @@ def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
     column_mapping = {
         "Date": "date",
         "Ticker": "ticker",
-        "Close": "adjusted_close",  # yfinance returns the adjusted close value as "Close"
+        "Close": "adjusted_close",
         "Dividends": "dividends_per_share",
     }
 
-    df = (
-        yf.download(tickers=["IWV"], start=start_date, end=end_date, actions=True)
-        .stack(future_stack=True)
-        .reset_index()
-    )
-
+    data = yf.download(tickers=["IWV"], start=start_date, end=end_date, actions=True)
+    if data.empty:
+        df = pl.DataFrame(
+            {"Date": start_date, "Ticker": "IWV", "Close": 0, "Dividends": 0}
+        )
+    else:
+        df = pl.from_pandas(data.stack(future_stack=True).reset_index())
     return (
-        pl.from_pandas(df)
-        .select(column_mapping.keys())
+        df.select(column_mapping.keys())
         .rename(column_mapping)
         .sort("date")
         .with_columns(
             pl.col("date").dt.date(),
             pl.col("adjusted_close").pct_change().alias("return"),
         )
+        .with_columns(pl.col("return").fill_null(0.0))
         .drop_nulls("return")
         .sort("date")
     )
