@@ -1,4 +1,5 @@
 import datetime as dt
+import logging
 import os
 
 import aws
@@ -6,10 +7,12 @@ import dotenv
 import fredapi
 import polars as pl
 from airflow.sdk import task
-import logging
-log = logging.getLogger(__name__)
 
 import config
+
+
+log = logging.getLogger(__name__)
+
 
 
 dotenv.load_dotenv(override=True)
