@@ -1,5 +1,4 @@
 import datetime as dt
-import logging
 import os
 
 import aws
@@ -9,9 +8,6 @@ import polars as pl
 from airflow.sdk import task
 
 import config
-
-
-log = logging.getLogger(__name__)
 
 
 
@@ -53,10 +49,10 @@ def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
 
 @task(task_id="risk_free_rate_etl")
 def risk_free_rate_etl_daily() -> None:
-    today = dt.date.today()
+    yesterday = dt.date.today() - dt.timedelta(days=1)
 
     # 1. Get risk free rate data
-    df = get_risk_free_rate(today, today)
+    df = get_risk_free_rate(yesterday, yesterday)
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -69,7 +65,7 @@ def risk_free_rate_etl_daily() -> None:
     db.execute_sql_file("dags/sql/risk_free_rate_create.sql")
 
     # 3. Load into stage table
-    stage_table = f"{today}_RISK_FREE_RATE"
+    stage_table = f"{yesterday}_RISK_FREE_RATE"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
