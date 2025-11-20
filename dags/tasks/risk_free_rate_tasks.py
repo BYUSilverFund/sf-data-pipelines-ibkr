@@ -50,7 +50,6 @@ def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
 @task(task_id="risk_free_rate_etl")
 def risk_free_rate_etl_daily() -> None:
     week_ago = dt.date.today() - dt.timedelta(days=7)
-    # 0.000122371639901697
 
     # 1. Get risk free rate data
     df = get_risk_free_rate(week_ago, dt.date.today())
