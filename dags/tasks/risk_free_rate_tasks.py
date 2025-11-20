@@ -49,10 +49,11 @@ def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
 
 @task(task_id="risk_free_rate_etl")
 def risk_free_rate_etl_daily() -> None:
-    yesterday = dt.date.today() - dt.timedelta(days=1)
+    week_ago = dt.date.today() - dt.timedelta(days=7)
+    # 0.000122371639901697
 
     # 1. Get risk free rate data
-    df = get_risk_free_rate(yesterday, yesterday)
+    df = get_risk_free_rate(week_ago, dt.date.today())
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -65,7 +66,7 @@ def risk_free_rate_etl_daily() -> None:
     db.execute_sql_file("dags/sql/risk_free_rate_create.sql")
 
     # 3. Load into stage table
-    stage_table = f"{yesterday}_RISK_FREE_RATE"
+    stage_table = f"{dt.date.today()}_RISK_FREE_RATE"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table
