@@ -8,6 +8,12 @@ Install docker by following this [guide](https://docs.docker.com/desktop/setup/i
 
 ## Development
 
+Install pre-commit hooks
+
+```bash
+pre-commit install
+```
+
 Spin up the containers using
 
 ```bash
@@ -16,6 +22,8 @@ docker compose up --build
 
 Access the web UI at
 [http://localhost:8080](http://localhost:8080)
+or if you are using self signed certs and the reverse proxy then
+[https://localhost](https://localhost)
 
 Login using
 

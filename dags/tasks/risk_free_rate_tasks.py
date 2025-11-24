@@ -10,7 +10,6 @@ from airflow.sdk import task
 import config
 
 
-
 dotenv.load_dotenv(override=True)
 
 

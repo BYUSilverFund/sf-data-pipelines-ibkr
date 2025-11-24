@@ -34,14 +34,28 @@ values AS(
         SUM(dividends) AS dividends
     FROM transform
     GROUP BY date
+),
+with_previous AS(
+    SELECT
+        date,
+        starting_value,
+        ending_value,
+        deposits_withdrawals,
+        dividends,
+        LAG(ending_value) OVER (ORDER BY date) AS prev_ending_value
+    FROM values
 )
 SELECT
     date,
     ending_value - deposits_withdrawals AS value,
-     ((ending_value - deposits_withdrawals) / COALESCE(LAG(ending_value) OVER (ORDER BY date), ending_value)) - 1 AS return,
+    CASE 
+        WHEN prev_ending_value IS NULL THEN NULL
+        ELSE ((ending_value - deposits_withdrawals) / NULLIF(prev_ending_value, 0)) - 1
+    END AS return,
     dividends
-FROM values
+FROM with_previous
 WHERE date BETWEEN '{{start_date}}' AND '{{end_date}}'
+  AND prev_ending_value IS NOT NULL  -- Skip first date in window where LAG is NULL
 ON CONFLICT (date)
 DO UPDATE SET
     value = EXCLUDED.value,
