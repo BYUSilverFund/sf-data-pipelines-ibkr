@@ -27,19 +27,15 @@ def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
 
     return (
         pl.from_pandas(df)
-        .with_columns(pl.col("date").dt.date(), pl.col("yield").truediv(100))
+        .with_columns(pl.col("date").dt.date(), pl.col("yield") / 100)
         .sort("date")
+        .with_columns(pl.col("yield").forward_fill())
         .with_columns(pl.col("yield").shift(1).alias("yield_lag"))
         .with_columns(
-            pl.lit(100).truediv(1 + pl.col("yield_lag") * 30 / 360).alias("price_lag"),
-            pl.lit(100).truediv(1 + pl.col("yield") * 29 / 360).alias("price"),
+            (100 / (1 + pl.col("yield_lag") * 30 / 360)).alias("price_lag"),
+            (100 / (1 + pl.col("yield") * 29 / 360)).alias("price"),
         )
-        .with_columns(
-            pl.col("price").truediv("price_lag").sub(1).alias("return"),
-            pl.col("yield").truediv(360).alias("daily_yield"),
-        )
-        .sort("date")
-        .with_columns(pl.col("return", "daily_yield").fill_null(strategy="forward"))
+        .with_columns((pl.col("price") / pl.col("price_lag") - 1).alias("return"))
         .filter(pl.col("date").is_between(start_date, end_date))
         .sort("date")
         .select("date", "return")
