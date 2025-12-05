@@ -14,6 +14,7 @@ Install pre-commit hooks
 pre-commit install
 ```
 
+
 For local development, generate self-signed certificates using OpenSSL (you will only need to do this once):
 
 ```bash
