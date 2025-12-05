@@ -2,10 +2,8 @@ import datetime as dt
 import os
 
 import aws
-import dateutil.relativedelta as du
 import dotenv
 import polars as pl
-import tools
 import yfinance as yf
 from airflow.sdk import task
 
@@ -46,16 +44,11 @@ def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
 
 @task(task_id="benchmark_etl")
 def benchmark_etl_daily() -> None:
-    yesterday = dt.date.today() - du.relativedelta(days=1)
-    last_market_date = tools.get_last_market_date(reference_date=yesterday)
-    day_after_last_market_date = last_market_date + du.relativedelta(days=1)
-    day_before_last_market_date = last_market_date - du.relativedelta(days=1)
-    previous_market_date = tools.get_last_market_date(
-        reference_date=day_before_last_market_date
-    )
+    from_date = config.min_date
+    to_date = dt.date.today()
 
     # 1. Pull calendar data
-    df = get_benchmark_data(previous_market_date, day_after_last_market_date)
+    df = get_benchmark_data(from_date, to_date)
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -68,7 +61,7 @@ def benchmark_etl_daily() -> None:
     db.execute_sql_file("dags/sql/benchmark_create.sql")
 
     # 3. Load into stage table
-    stage_table = f"{last_market_date}_BENCHMARK"
+    stage_table = f"{to_date}_BENCHMARK"
     db.stage_dataframe(df, stage_table)
 
     # 4. Merge into core table

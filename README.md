@@ -14,6 +14,15 @@ Install pre-commit hooks
 pre-commit install
 ```
 
+
+For local development, generate self-signed certificates using OpenSSL (you will only need to do this once):
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
+```
+
+After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/conf/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
+
 Spin up the containers using
 
 ```bash
@@ -25,16 +34,16 @@ Access the web UI at
 or if you are using self signed certs and the reverse proxy then
 [https://localhost](https://localhost)
 
-Login using
+Login using whatever you have set your local login to be.
 
 - username: airflow
 
 - password: airflow
 
-Shut down containers and remove volumes using
+Shut down containers using
 
 ```bash
-docker compose down --volumes --rmi all
+docker compose down 
 ```
 
 ## Reverse Proxy Nginx Server (HTTPS)
@@ -43,15 +52,6 @@ The reverse proxy is an Nginx server running in a Docker container as part of th
 
 #### TLS Certificate Management:
 
-##### Local Development
-
-For local development, generate self-signed certificates using OpenSSL:
-
-```bash
-openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
-```
-
-After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/letsencrypt/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
 
 ##### Production
 
@@ -92,33 +92,6 @@ the above ^^ command is ran daily using a systemd timer on the EC2 instance.
 - On the production server, the Certbot container will manage certificates.
 - For local development, you will need to use OpenSSL to create certificates. Alternatively, you can comment out the SSL server section in your `nginx.conf` file, or simply exclude the Nginx and Certbot containers from your Docker Compose setup. These components are only required for production environments where HTTPS and certificate management are necessary.
 
-## Production Deployment (CI/CD)
-
-Deployment to the production EC2 instance is now **fully automated** using GitHub Actions and AWS SSM.
-
-### How it Works
-
-- On every push to the `main` branch (except for changes to `README.md`), a GitHub Actions workflow is triggered.
-- The workflow:
-  1. Starts the EC2 instance if it is stopped.
-  2. Uses AWS SSM to run a deployment script on the EC2 instance.
-  3. The script:
-     - Pulls the latest code from GitHub.
-     - Installs or updates Docker and Git if needed.
-     - Brings down any running containers and rebuilds/starts them with Docker Compose.
-     - Issues or renews SSL certificates using Certbot (with Nginx installer).
-     - Ensures systemd timers for automatic certificate renewal are up to date.
-
-### No Manual Steps Required
-
-- **No SSH required:** All deployment steps are handled automatically via SSM.
-- **No manual certificate management:** Certbot and systemd timers handle certificate issuance and renewal.
-- **No manual container management:** Docker Compose is used for all container lifecycle operations.
-
-### To Trigger a Deployment
-
-- **Push any change to the `main` branch** (except for `README.md`).
-- The workflow will automatically deploy the latest code to the production EC2 instance.
 
 ### Infrastructure Notes
 

@@ -7,5 +7,7 @@ SELECT
     return
 FROM "{{stage_table}}"
 ON CONFLICT (date)
-DO NOTHING
+DO UPDATE SET
+    return = EXCLUDED.return
+WHERE risk_free_rate_new.return IS DISTINCT FROM EXCLUDED.return
 ;
