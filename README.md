@@ -13,14 +13,13 @@ Install pre-commit hooks
 ```bash
 pre-commit install
 ```
-
 For local development, generate self-signed certificates using OpenSSL (you will only need to do this once):
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
 ```
 
-After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/letsencrypt/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
+After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/conf/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
 
 Spin up the containers using
 
@@ -33,7 +32,7 @@ Access the web UI at
 or if you are using self signed certs and the reverse proxy then
 [https://localhost](https://localhost)
 
-Login using
+Login using whatever you have set your local login to be.
 
 - username: airflow
 
