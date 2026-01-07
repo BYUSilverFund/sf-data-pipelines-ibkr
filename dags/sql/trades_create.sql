@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS trades_new (
+CREATE TABLE IF NOT EXISTS trades (
     report_date DATE,
     client_account_id TEXT,
     asset_class TEXT,

@@ -1,4 +1,4 @@
-INSERT INTO calendar_new (
+INSERT INTO calendar (
     date
 )
 SELECT

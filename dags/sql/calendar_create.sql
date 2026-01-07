@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS calendar_new (
+CREATE TABLE IF NOT EXISTS calendar (
     date DATE,
     PRIMARY KEY (date)
 )

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS benchmark_new (
+CREATE TABLE IF NOT EXISTS benchmark (
     date DATE,
     ticker TEXT,
     adjusted_close NUMERIC,
