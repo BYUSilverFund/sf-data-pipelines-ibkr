@@ -1,4 +1,4 @@
-INSERT INTO dividends_new (
+INSERT INTO dividends (
     report_date,
     client_account_id,
     asset_class,

@@ -12,8 +12,8 @@ WITH filter AS(
         ending_value,
         deposits_withdrawals,
         dividends
-    FROM delta_nav_new d
-    INNER JOIN calendar_new c ON d.date = c.date
+    FROM delta_nav d
+    INNER JOIN calendar c ON d.date = c.date
 ),
 transform AS(
     SELECT

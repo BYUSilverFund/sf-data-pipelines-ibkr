@@ -1,4 +1,4 @@
-INSERT INTO benchmark_new (
+INSERT INTO benchmark (
     date,
     ticker,
     adjusted_close,
