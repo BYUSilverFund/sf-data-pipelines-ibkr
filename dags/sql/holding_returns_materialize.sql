@@ -149,7 +149,7 @@ returns AS(
         price_1 AS price,
         shares_traded,
         average_trade_price,
-        (shares_1_adj * price_1 + dividends) / (shares_0 * price_0) - 1 AS return,
+        side * ((shares_1_adj * price_1 + dividends) / (shares_0 * price_0) - 1) AS return,
         dividends,
         dividends_per_share
     FROM adjustments a
