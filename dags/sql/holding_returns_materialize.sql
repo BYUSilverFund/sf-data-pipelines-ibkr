@@ -21,7 +21,7 @@ WITH positions AS (
         quantity AS shares_1,
         mark_price AS price_1,
         CASE WHEN quantity > 0 THEN 1 ELSE -1 END AS side
-    FROM positions_new
+    FROM positions
     WHERE sub_category IN ('ETF', 'COMMON', 'ADR', 'GDR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
 ),
@@ -32,7 +32,7 @@ dividends AS(
         symbol,
         SUM(net_amount) AS dividends,
         SUM(gross_rate) AS dividends_per_share
-    FROM dividends_new
+    FROM dividends
     WHERE sub_category IN ('ETF', 'COMMON', 'ADR', 'GDR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
@@ -44,7 +44,7 @@ trades AS(
         symbol,
         SUM(quantity) AS shares_traded,
         SUM(quantity * trade_price) / SUM(quantity) AS average_trade_price
-    FROM trades_new
+    FROM trades
     WHERE sub_category IN ('ETF', 'COMMON', 'ADR', 'GDR')
         AND report_date BETWEEN '{{start_date}}' AND '{{end_date}}'
     GROUP BY client_account_id, symbol, report_date
@@ -153,7 +153,7 @@ returns AS(
         dividends,
         dividends_per_share
     FROM adjustments a
-    INNER JOIN calendar_new c ON a.report_date = c.date
+    INNER JOIN calendar c ON a.report_date = c.date
 )
 SELECT 
     date,

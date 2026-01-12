@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS delta_nav_new (
+CREATE TABLE IF NOT EXISTS delta_nav (
     date DATE,
     client_account_id TEXT,
     starting_value NUMERIC,

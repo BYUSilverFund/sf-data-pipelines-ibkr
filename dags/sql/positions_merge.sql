@@ -1,4 +1,4 @@
-INSERT INTO positions_new (
+INSERT INTO positions (
     report_date,
     client_account_id,
     asset_class,

@@ -1,4 +1,4 @@
-INSERT INTO trades_new (
+INSERT INTO trades (
     report_date,
     client_account_id,
     asset_class,

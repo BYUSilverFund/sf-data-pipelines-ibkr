@@ -1,4 +1,4 @@
-INSERT INTO delta_nav_new (
+INSERT INTO delta_nav (
     date,
     client_account_id,
     starting_value,

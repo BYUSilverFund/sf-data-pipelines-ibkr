@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS dividends_new (
+CREATE TABLE IF NOT EXISTS dividends (
     report_date DATE,
     client_account_id TEXT,
     asset_class TEXT,
