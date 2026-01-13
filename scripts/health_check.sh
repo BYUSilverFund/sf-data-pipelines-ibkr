@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Health check for Airflow webserver
 # Default port can be overridden via HEALTHCHECK_PORT
-PORT=${HEALTHCHECK_PORT:-8080}
+PORT=${HEALTHCHECK_PORT:-80}
 HOST=${HEALTHCHECK_HOST:-localhost}
 
 # Try HTTP health endpoint first
