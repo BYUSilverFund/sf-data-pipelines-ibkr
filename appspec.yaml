@@ -1,0 +1,23 @@
+version: 0.0
+os: linux
+files: []
+hooks:
+  BeforeInstall:
+    - location: scripts/set_exec.sh
+      timeout: 300
+      runas: root
+
+  ApplicationStart:
+    - location: scripts/deploy.sh
+      timeout: 600
+      runas: root
+
+  ValidateService:
+    - location: scripts/health_check.sh
+      timeout: 300
+      runas: root
+
+  AfterAllowTraffic:
+    - location: scripts/cleanup_deployment.sh
+      timeout: 300
+      runas: root
