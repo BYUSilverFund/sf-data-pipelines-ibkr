@@ -1,16 +1,12 @@
 version: 0.2
 
 phases:
-  pre_build:
-    commands:
-      - echo Preparing artifact
   build:
     commands:
-      - mkdir -p artifact
-      - cp appspec.yml artifact/ || true
-      - if [ -d scripts ]; then cp -r scripts artifact/; fi
-      - (cd artifact && zip -r ../appspec-artifact.zip .)
+      - echo Preparing artifact
+
 artifacts:
   files:
-    - appspec-artifact.zip
+    - appspec.yml
+    - scripts/**
   discard-paths: yes
