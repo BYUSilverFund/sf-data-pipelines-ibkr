@@ -4,7 +4,7 @@ TARGET_DIR="/home/ec2-user/airflow"
 cd $TARGET_DIR
 
 # 2. Pull the latest code from GitHub
-git pull origin main
+git pull
 
 # 3. Restart the containers with the new code
 # --build ensures that if you changed a Dockerfile, it builds it locally
