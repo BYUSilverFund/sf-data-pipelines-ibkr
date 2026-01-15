@@ -5,3 +5,4 @@ polars
 tqdm
 yfinance
 s3fs
+slack-sdk>=3.19.6

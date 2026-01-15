@@ -2,6 +2,7 @@ import datetime as dt
 
 import dateutil.relativedelta as du
 from airflow.sdk import dag, get_current_context, task
+from slack_notifier import slack_on_failure
 from tasks.benchmark_tasks import (
     benchmark_etl_backfill,
     benchmark_etl_daily,
@@ -26,7 +27,11 @@ from tasks.risk_free_rate_tasks import (
 from tasks.s3_to_rds_tasks import s3_to_rds_backfill, s3_to_rds_daily, s3_to_rds_reload
 
 
-@dag(schedule="0 8 * * *", max_active_tasks=1)
+# Default args applied to DAGs in this module. Sends Slack alerts on task failures.
+default_args = {"on_failure_callback": slack_on_failure}
+
+
+@dag(schedule="0 8 * * *", max_active_tasks=1, default_args=default_args)
 def dashboard_dag_daily():
     [
         [ibkr_to_s3_daily() >> s3_to_rds_daily(), calendar_etl_daily()]
@@ -36,7 +41,7 @@ def dashboard_dag_daily():
     ]
 
 
-@dag(schedule=None, max_active_tasks=1)
+@dag(schedule=None, max_active_tasks=1, default_args=default_args)
 def dashboard_dag_backfill():
     @task
     def get_dates() -> dict[str, str]:
@@ -73,7 +78,7 @@ def dashboard_dag_backfill():
     ]
 
 
-@dag(schedule=None)
+@dag(schedule=None, default_args=default_args)
 def dashboard_dag_reload():
     [
         [s3_to_rds_reload(), calendar_etl_reload()] >> return_materializations_reload(),
