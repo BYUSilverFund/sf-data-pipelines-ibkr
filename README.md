@@ -68,6 +68,11 @@ docker-compose run certbot renew
 
 the above ^^ command is ran daily using a systemd timer on the EC2 instance.
 
+Copy the `certbot-renew.service` and `certbot-renew.timer` files to the following locations (for setup and any changes)
+
+- **Service file location:** `/etc/systemd/system/certbot-renew.service`
+- **Timer file location:** `/etc/systemd/system/certbot-renew.timer`
+
 - **List running timers:**
   ```bash
   systemctl list-timers --all
@@ -81,9 +86,6 @@ the above ^^ command is ran daily using a systemd timer on the EC2 instance.
   ```bash
   sudo journalctl -u certbot-renew.service
   ```
-
-- **Service file location:** `/etc/systemd/system/certbot-renew.service`
-- **Timer file location:** `/etc/systemd/system/certbot-renew.timer`
 
 #### Notes:
 
