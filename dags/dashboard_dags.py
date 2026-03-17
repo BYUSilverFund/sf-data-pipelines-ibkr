@@ -1,7 +1,6 @@
 import datetime as dt
 
 import dateutil.relativedelta as du
-from airflow.sdk import dag, get_current_context, task
 from slack_notifier import slack_on_failure
 from tasks.benchmark_tasks import (
     benchmark_etl_backfill,
@@ -25,6 +24,8 @@ from tasks.risk_free_rate_tasks import (
     risk_free_rate_etl_reload,
 )
 from tasks.s3_to_rds_tasks import s3_to_rds_backfill, s3_to_rds_daily, s3_to_rds_reload
+
+from airflow.sdk import dag, get_current_context, task
 
 
 # Default args applied to DAGs in this module. Sends Slack alerts on task failures.
