@@ -14,7 +14,7 @@ Install pre-commit hooks
 pre-commit install
 ```
 
-For local development, generate self-signed certificates using OpenSSL (you will only need to do this once):
+For local development, generate self-signed certificates using OpenSSL (you will only need to do this once) alternatively you may be able to run it by commenting out the nginx and certbot containers in the `docker-compose.yaml` file:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
@@ -99,6 +99,7 @@ Copy the `certbot-renew.service` and `certbot-renew.timer` files to the followin
 - Airflow is hosted on an EC2 instance (named `airflow`).
 - This EC2 is not managed by Terraform and does not have a dev environment.
 - Environment variables are on the EC2 in a .env file within the airflow directory
+- The airflow instance is updated on merge to prod branch by an AWS codepipeline that is managed by terraform
 
 ## Code Quality
 
