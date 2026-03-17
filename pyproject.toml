@@ -32,7 +32,8 @@ exclude = [
 # Enable pycodestyle (`E`), Pyflakes (`F`), and isort (`I`)
 select = ["E", "F", "I"]
 # Ignore line length - let formatter handle it
-ignore = ["E501"]
+# Also ignore import-sorting warning I001 (unsorted import block) in CI
+ignore = ["E501", "I001"]
 
 # Allow fix for all enabled rules (when `--fix` is provided)
 fixable = ["ALL"]

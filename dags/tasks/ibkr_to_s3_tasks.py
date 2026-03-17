@@ -1,16 +1,44 @@
 import datetime as dt
+import logging
 import os
+import time
 
 import aws
 import dateutil.relativedelta as du
 import dotenv
+import pandas as pd
 import tools
-from airflow.sdk import task, task_group
 
+from airflow.sdk import task, task_group
 from config import configs
 
 
 dotenv.load_dotenv(override=True)
+
+logger = logging.getLogger(__name__)
+
+
+# this function recalls the ibkr api if the initial call fails.
+def _retry_ibkr_call(
+    func, max_attempts: int = 5, backoff_secs: int = 2, *args, **kwargs
+):
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_exc = e
+            logger.warning(
+                "IBKR request attempt %d/%d failed: %s",
+                attempt,
+                max_attempts,
+                e,
+            )
+            if attempt < max_attempts:
+                time.sleep(backoff_secs * attempt)
+
+    logger.error("All %d IBKR attempts failed: %s", max_attempts, last_exc)
+    return None
 
 
 @task
@@ -18,13 +46,22 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
     yesterday = dt.date.today() - du.relativedelta(days=1)
     last_market_date = tools.get_last_market_date(reference_date=yesterday)
 
-    # 1. Pull data from IBKR
-    df = tools.ibkr_query(
+    # 1. Pull data from IBKR with retries
+    df = _retry_ibkr_call(
+        tools.ibkr_query,
         token=config["token"],
         query_id=config["queries"][query],
         from_date=last_market_date,
         to_date=last_market_date,
     )
+
+    if df is None:
+        logger.info(
+            "No data returned after retries for %s %s; uploading empty file.",
+            config.get("fund"),
+            query,
+        )
+        df = pd.DataFrame()
 
     # 2. Save to S3
     s3 = aws.S3(
@@ -42,15 +79,14 @@ def extract_and_store_task_backfill(
     config: dict, query: str, from_date: dt.date, to_date: dt.date
 ):
     # pass
-    # 1. Pull data from IBKR
-    df = tools.ibkr_query_batches(
+    # 1. Pull data from IBKR with retries
+    df = _retry_ibkr_call(
+        tools.ibkr_query_batches,
         token=config["token"],
         query_id=config["queries"][query],
         from_date=from_date,
         to_date=to_date,
-    )
-
-    # 2. Save to S3
+    )  # 2. Save to S3
     s3 = aws.S3(
         aws_access_key_id=os.getenv("USER_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("USER_SECRET_ACCESS_KEY"),

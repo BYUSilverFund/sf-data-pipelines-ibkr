@@ -68,6 +68,11 @@ docker-compose run certbot renew
 
 the above ^^ command is ran daily using a systemd timer on the EC2 instance.
 
+Copy the `certbot-renew.service` and `certbot-renew.timer` files to the following locations (for setup and any changes)
+
+- **Service file location:** `/etc/systemd/system/certbot-renew.service`
+- **Timer file location:** `/etc/systemd/system/certbot-renew.timer`
+
 - **List running timers:**
   ```bash
   systemctl list-timers --all
@@ -82,9 +87,6 @@ the above ^^ command is ran daily using a systemd timer on the EC2 instance.
   sudo journalctl -u certbot-renew.service
   ```
 
-- **Service file location:** `/etc/systemd/system/certbot-renew.service`
-- **Timer file location:** `/etc/systemd/system/certbot-renew.timer`
-
 #### Notes:
 
 - Let's Encrypt's Certbot does not issue certificates for local testing because it requires a publicly resolvable domain name to verify ownership. However, for local testing, you can generate certificates using self-signed certificates.
@@ -96,7 +98,7 @@ the above ^^ command is ran daily using a systemd timer on the EC2 instance.
 
 - Airflow is hosted on an EC2 instance (named `airflow`).
 - This EC2 is not managed by Terraform and does not have a dev environment.
-- Environment variables are configured directly on the EC2 from the AWS console or CLI.
+- Environment variables are on the EC2 in a .env file within the airflow directory
 
 ## Code Quality
 
