@@ -1,10 +1,21 @@
 import datetime as dt
+import os
 
+import dotenv
+
+
+dotenv.load_dotenv(override=True)
+
+GRAD_TOKEN = os.getenv("GRAD_TOKEN")
+UNDERGRAD_TOKEN = os.getenv("UNDERGRAD_TOKEN")
+BC_TOKEN = os.getenv("BC_TOKEN")
+QUANT_TOKEN = os.getenv("QUANT_TOKEN")
+QUANT_PAPER_TOKEN = os.getenv("QUANT_PAPER_TOKEN")
 
 configs = [
     {
         "fund": "grad",
-        "token": "547414482431868624428004",
+        "token": GRAD_TOKEN,
         "queries": {
             "nav": "993010",
             "delta_nav": "993013",
@@ -15,7 +26,7 @@ configs = [
     },
     {
         "fund": "undergrad",
-        "token": "184072668161023104096150",
+        "token": UNDERGRAD_TOKEN,
         "queries": {
             "nav": "989615",
             "delta_nav": "989561",
@@ -26,7 +37,7 @@ configs = [
     },
     {
         "fund": "brigham_capital",
-        "token": "1405366799704294639032",
+        "token": BC_TOKEN,
         "queries": {
             "nav": "989606",
             "delta_nav": "989601",
@@ -37,7 +48,7 @@ configs = [
     },
     {
         "fund": "quant",
-        "token": "325702086386108763158099",
+        "token": QUANT_TOKEN,
         "queries": {
             "nav": "1029491",
             "delta_nav": "1029495",
@@ -48,7 +59,7 @@ configs = [
     },
     {
         "fund": "quant_paper",
-        "token": "862681561565822535501422",
+        "token": QUANT_PAPER_TOKEN,
         "queries": {
             "nav": "1318734",
             "delta_nav": "1318735",
