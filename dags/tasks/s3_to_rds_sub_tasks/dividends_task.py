@@ -96,7 +96,9 @@ def dividends_transform_and_load_daily():
         df_clean = clean_dividends_data(df)
         dfs.append(df_clean)
 
-    df = pl.concat(dfs)
+    df = pl.concat(dfs).unique(
+        subset=["report_date", "client_account_id", "symbol", "action_id"]
+    )
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -142,7 +144,9 @@ def dividends_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
         df_clean = clean_dividends_data(df)
         dfs.append(df_clean)
 
-    df = pl.concat(dfs)
+    df = pl.concat(dfs).unique(
+        subset=["report_date", "client_account_id", "symbol", "action_id"]
+    )
 
     # 2. Create core table if not exists
     db = aws.RDS(
@@ -199,7 +203,9 @@ def dividends_transform_and_load_reload():
         df_clean = clean_dividends_data(df)
         dfs.append(df_clean)
 
-    df = pl.concat(dfs).unique()
+    df = pl.concat(dfs).unique(
+        subset=["report_date", "client_account_id", "symbol", "action_id"]
+    )
 
     # 3. Create core table if not exists
     db = aws.RDS(
