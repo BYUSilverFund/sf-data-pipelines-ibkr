@@ -32,7 +32,7 @@ from airflow.sdk import dag, get_current_context, task
 default_args = {"on_failure_callback": slack_on_failure}
 
 
-@dag(schedule="0 8 * * *", max_active_tasks=1, default_args=default_args)
+@dag(schedule="0 4 * * *", max_active_tasks=1, default_args=default_args)
 def dashboard_dag_daily():
     [
         [ibkr_to_s3_daily() >> s3_to_rds_daily(), calendar_etl_daily()]

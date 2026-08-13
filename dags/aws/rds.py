@@ -79,7 +79,7 @@ class RDS:
                 self.connection.commit()
                 return None
 
-    def execute_to_df(self, query_string: str) -> list[tuple[any]]:
+    def execute_to_df(self, query_string: str) -> pl.DataFrame:
         return pl.read_database(
             query=query_string,
             connection=self.connection,

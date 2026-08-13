@@ -12,6 +12,33 @@ from airflow.sdk import task
 
 dotenv.load_dotenv(override=True)
 
+storage_options = {
+    "key": os.getenv("USER_ACCESS_KEY_ID"),
+    "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
+}
+
+db = aws.RDS(
+    db_endpoint=os.getenv("DB_ENDPOINT"),
+    db_name=os.getenv("DB_NAME"),
+    db_user=os.getenv("DB_USER"),
+    db_password=os.getenv("DB_PASSWORD"),
+    db_port=os.getenv("DB_PORT"),
+)
+
+positions_schema = {
+    "report_date": pl.Date,
+    "client_account_id": pl.String,
+    "asset_class": pl.String,
+    "sub_category": pl.String,
+    "description": pl.String,
+    "cusip": pl.String,
+    "isin": pl.String,
+    "symbol": pl.String,
+    "mark_price": pl.Float64,
+    "quantity": pl.Float64,
+    "fx_rate_to_base": pl.Float64,
+}
+
 
 def clean_positions_data(df: pl.DataFrame) -> pl.DataFrame:
     positions_column_mapping = {
@@ -26,20 +53,6 @@ def clean_positions_data(df: pl.DataFrame) -> pl.DataFrame:
         "MarkPrice": "mark_price",
         "Quantity": "quantity",
         "FXRateToBase": "fx_rate_to_base",
-    }
-
-    positions_schema = {
-        "report_date": pl.Date,
-        "client_account_id": pl.String,
-        "asset_class": pl.String,
-        "sub_category": pl.String,
-        "description": pl.String,
-        "cusip": pl.String,
-        "isin": pl.String,
-        "symbol": pl.String,
-        "mark_price": pl.Float64,
-        "quantity": pl.Float64,
-        "fx_rate_to_base": pl.Float64,
     }
 
     return (
@@ -63,11 +76,6 @@ def positions_transform_and_load_daily():
         f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-positions.csv"
     )
 
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
-
     fs = fsspec.filesystem("s3", **storage_options)
     file_list = fs.glob(source_pattern)
 
@@ -82,13 +90,6 @@ def positions_transform_and_load_daily():
     df = pl.concat(dfs).unique(subset=["report_date", "client_account_id", "symbol"])
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/positions_create.sql")
 
     # 3. Load into stage table
@@ -109,11 +110,6 @@ def positions_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     # 1. Process raw positions data
     source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-positions.csv"
 
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
-
     fs = fsspec.filesystem("s3", **storage_options)
     file_list = fs.glob(source_pattern)
 
@@ -128,13 +124,6 @@ def positions_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     df = pl.concat(dfs).unique(subset=["report_date", "client_account_id", "symbol"])
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/positions_create.sql")
 
     # 3. Load into stage table
@@ -153,11 +142,6 @@ def positions_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
 @task(task_id="positions_transform_and_load")
 def positions_transform_and_load_reload():
     # 1. Get all files in S3
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
-
     def get_file_list(source_pattern: str) -> list[str]:
         fs = fsspec.filesystem("s3", **storage_options)
         return fs.glob(source_pattern)
@@ -185,13 +169,6 @@ def positions_transform_and_load_reload():
     df = pl.concat(dfs).unique(subset=["report_date", "client_account_id", "symbol"])
 
     # 3. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/positions_create.sql")
 
     # 4. Load into stage table
