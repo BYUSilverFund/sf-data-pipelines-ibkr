@@ -2,15 +2,11 @@ import datetime as dt
 import os
 
 import dateutil.relativedelta as du
-import dotenv
 import fredapi
 import polars as pl
 
 import dags.tools as tools
 from aws.rds import db
-
-
-dotenv.load_dotenv(override=True)
 
 
 def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:

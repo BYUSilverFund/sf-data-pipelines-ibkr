@@ -2,15 +2,12 @@ import datetime as dt
 import os
 
 import dateutil.relativedelta as du
-import dotenv
 import fsspec
 import polars as pl
 from airflow.sdk import task
 from aws.rds import db
 from aws.s3 import parquet_storage_options
 
-
-dotenv.load_dotenv(override=True)
 
 historical_data_schema = {
     "report_date": pl.Date,

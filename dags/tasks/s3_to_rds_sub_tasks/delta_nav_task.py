@@ -1,15 +1,12 @@
 import datetime as dt
 
 import dateutil.relativedelta as du
-import dotenv
 import fsspec
 import polars as pl
 import tools
 from airflow.sdk import task
 from aws.rds import db
 from aws.s3 import storage_options
-
-dotenv.load_dotenv(override=True)
 
 
 def clean_delta_nav_data(df: pl.DataFrame) -> pl.DataFrame:

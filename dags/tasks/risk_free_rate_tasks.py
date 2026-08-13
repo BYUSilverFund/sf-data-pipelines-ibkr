@@ -1,7 +1,6 @@
 import datetime as dt
 import os
 
-import dotenv
 import fredapi
 import polars as pl
 from airflow.sdk import task
@@ -9,9 +8,6 @@ from aws.rds import db
 
 
 import config
-
-
-dotenv.load_dotenv(override=True)
 
 
 def get_risk_free_rate(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
