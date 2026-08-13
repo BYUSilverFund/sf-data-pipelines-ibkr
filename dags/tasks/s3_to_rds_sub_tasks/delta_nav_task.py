@@ -1,16 +1,12 @@
 import datetime as dt
-import os
 
-import aws
 import dateutil.relativedelta as du
-import dotenv
 import fsspec
 import polars as pl
 import tools
 from airflow.sdk import task
-
-
-dotenv.load_dotenv(override=True)
+from aws.rds import db
+from aws.s3 import storage_options
 
 
 def clean_delta_nav_data(df: pl.DataFrame) -> pl.DataFrame:
@@ -66,11 +62,6 @@ def delta_nav_transform_and_load_daily():
         f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-delta_nav.csv"
     )
 
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
-
     fs = fsspec.filesystem("s3", **storage_options)
     file_list = fs.glob(source_pattern)
 
@@ -85,13 +76,6 @@ def delta_nav_transform_and_load_daily():
     df = pl.concat(dfs)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 3. Load into stage table
@@ -112,11 +96,6 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     # 1. Process raw positions data
     source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-delta_nav.csv"
 
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
-
     fs = fsspec.filesystem("s3", **storage_options)
     file_list = fs.glob(source_pattern)
 
@@ -131,13 +110,6 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
     df = pl.concat(dfs)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 3. Load into stage table
@@ -156,10 +128,6 @@ def delta_nav_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
 @task(task_id="delta_nav_transform_and_load")
 def delta_nav_transform_and_load_reload():
     # 1. Get all files in S3
-    storage_options = {
-        "key": os.getenv("USER_ACCESS_KEY_ID"),
-        "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-    }
 
     def get_file_list(source_pattern: str) -> list[str]:
         fs = fsspec.filesystem("s3", **storage_options)
@@ -188,13 +156,6 @@ def delta_nav_transform_and_load_reload():
     df = pl.concat(dfs).unique()
 
     # 3. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/delta_nav_create.sql")
 
     # 4. Load into stage table

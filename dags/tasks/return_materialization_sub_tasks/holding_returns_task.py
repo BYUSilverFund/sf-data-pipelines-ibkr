@@ -1,10 +1,10 @@
 import datetime as dt
-import os
 
-import aws
 import dateutil.relativedelta as du
 import tools
 from airflow.sdk import task
+from aws.rds import db
+
 
 import config
 
@@ -16,13 +16,6 @@ def holding_return_materializations_daily() -> None:
     start_date = end_date - du.relativedelta(days=7)
 
     # 1. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/holding_returns_create.sql")
 
     # 2. Materialize table
@@ -37,13 +30,6 @@ def holding_return_materializations_backfill(
     from_date: dt.date, to_date: dt.date
 ) -> None:
     # 1. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/holding_returns_create.sql")
 
     # 2. Materialize table
@@ -59,13 +45,6 @@ def holding_return_materializations_reload() -> None:
     to_date = dt.date.today()
 
     # 1. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/holding_returns_create.sql")
 
     # 2. Materialize table

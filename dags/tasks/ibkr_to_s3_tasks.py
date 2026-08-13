@@ -5,7 +5,6 @@ import time
 
 import aws
 import dateutil.relativedelta as du
-import dotenv
 import pandas as pd
 import tools
 
@@ -15,7 +14,6 @@ from config import configs
 # this file contains the tasks that pull from the ibkr api and store the results in S3.
 # the tasks are not async / concurrent, they could be but there is potential for api rate limits so we have not tried to make them async. (this is something that could be done in the future)
 
-dotenv.load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 

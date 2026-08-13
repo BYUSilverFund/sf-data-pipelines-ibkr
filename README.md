@@ -98,7 +98,7 @@ Copy the `certbot-renew.service` and `certbot-renew.timer` files to the followin
 
 - Airflow is hosted on an EC2 instance (named `airflow`).
 - This EC2 is not managed by Terraform and does not have a dev environment.
-- Environment variables are on the EC2 in a .env file within the airflow directory
+- Environment variables are on the EC2 in a .env file within the airflow directory at /home/ec2_user/airflow/.env
 - The airflow instance is updated on merge to prod branch by an AWS codepipeline that is managed by terraform
 
 ## Code Quality
