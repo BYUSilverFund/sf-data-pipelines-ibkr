@@ -1,7 +1,11 @@
+import os
 from io import BytesIO, StringIO
 
 import boto3
+import dotenv
 import polars as pl
+
+dotenv.load_dotenv(override=True)
 
 
 class S3:
@@ -46,3 +50,16 @@ class S3:
                 file_paths.append(file_path)
 
         return file_paths
+
+
+storage_options = {
+    "key": os.getenv("USER_ACCESS_KEY_ID"),
+    "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
+    "client_kwargs": {"region_name": "us-west-2"},
+}
+
+parquet_storage_options = {
+    "aws_access_key_id": os.getenv("USER_ACCESS_KEY_ID"),
+    "aws_secret_access_key": os.getenv("USER_SECRET_ACCESS_KEY"),
+    "aws_region": "us-west-2",
+}

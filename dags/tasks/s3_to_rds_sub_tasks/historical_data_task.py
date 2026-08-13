@@ -1,30 +1,16 @@
 import datetime as dt
+import os
 
 import dateutil.relativedelta as du
 import dotenv
 import fsspec
 import polars as pl
 from airflow.sdk import task
-import aws
-import os
+from aws.rds import db
+from aws.s3 import parquet_storage_options
 
 
 dotenv.load_dotenv(override=True)
-
-storage_options = {
-    "aws_access_key_id": os.getenv("USER_ACCESS_KEY_ID"),
-    "aws_secret_access_key": os.getenv("USER_SECRET_ACCESS_KEY"),
-    "aws_region": "us-west-2",
-}
-
-db = aws.RDS(
-    db_endpoint=os.getenv("DB_ENDPOINT"),
-    db_name=os.getenv("DB_NAME"),
-    db_user=os.getenv("DB_USER"),
-    db_password=os.getenv("DB_PASSWORD"),
-    db_port=os.getenv("DB_PORT"),
-)
-
 
 historical_data_schema = {
     "report_date": pl.Date,
@@ -84,7 +70,9 @@ def historical_data_upload(
         if not fs.exists(s3_path):
             continue
 
-        barra_df = pl.read_parquet(f"{s3_path}", storage_options=storage_options)
+        barra_df = pl.read_parquet(
+            f"{s3_path}", storage_options=parquet_storage_options
+        )
 
         # Filter Barra price data to only symbols ever held up to target_date
         filtered_df = barra_df.filter(pl.col("ticker").is_in(symbols))

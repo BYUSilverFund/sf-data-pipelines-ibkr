@@ -6,8 +6,8 @@ import dotenv
 import fredapi
 import polars as pl
 
-import aws
 import dags.tools as tools
+from aws.rds import db
 
 
 dotenv.load_dotenv(override=True)
@@ -54,13 +54,6 @@ def risk_free_rate_daily_flow() -> None:
     df = get_risk_free_rate(last_market_date, last_market_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("pipelines/ibkr/sql/risk_free_rate_create.sql")
 
     # 3. Load into stage table
@@ -82,13 +75,6 @@ def risk_free_rate_backfill_flow(start_date: dt.date, end_date: dt.date) -> None
     df = get_risk_free_rate(start_date, end_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("pipelines/ibkr/sql/risk_free_rate_create.sql")
 
     # 3. Load into stage table

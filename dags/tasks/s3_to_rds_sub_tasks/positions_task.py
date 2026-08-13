@@ -1,29 +1,15 @@
 import datetime as dt
-import os
 
-import aws
 import dateutil.relativedelta as du
 import dotenv
 import fsspec
 import polars as pl
 import tools
 from airflow.sdk import task
-
+from aws.rds import db
+from aws.s3 import storage_options
 
 dotenv.load_dotenv(override=True)
-
-storage_options = {
-    "key": os.getenv("USER_ACCESS_KEY_ID"),
-    "secret": os.getenv("USER_SECRET_ACCESS_KEY"),
-}
-
-db = aws.RDS(
-    db_endpoint=os.getenv("DB_ENDPOINT"),
-    db_name=os.getenv("DB_NAME"),
-    db_user=os.getenv("DB_USER"),
-    db_password=os.getenv("DB_PASSWORD"),
-    db_port=os.getenv("DB_PORT"),
-)
 
 positions_schema = {
     "report_date": pl.Date,

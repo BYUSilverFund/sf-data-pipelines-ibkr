@@ -1,12 +1,12 @@
 import datetime as dt
-import os
 
-import aws
 import dateutil.relativedelta as du
 import pandas_market_calendars as mcal
 import polars as pl
 import tools
 from airflow.sdk import task
+from aws.rds import db
+
 
 import config
 
@@ -38,13 +38,6 @@ def calendar_etl_daily() -> None:
     df = get_market_calendar(last_market_date, last_market_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/calendar_create.sql")
 
     # 3. Load into stage table
@@ -66,13 +59,6 @@ def calendar_etl_backfill(from_date: dt.date, to_date: dt.date) -> None:
     df = get_market_calendar(from_date, to_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/calendar_create.sql")
 
     # 3. Load into stage table
@@ -97,13 +83,6 @@ def calendar_etl_reload() -> None:
     df = get_market_calendar(from_date, to_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/calendar_create.sql")
 
     # 3. Load into stage table

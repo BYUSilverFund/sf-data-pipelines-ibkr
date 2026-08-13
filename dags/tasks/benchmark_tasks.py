@@ -1,16 +1,10 @@
 import datetime as dt
-import os
 
-import aws
-import dotenv
+import config
 import polars as pl
 import yfinance as yf
 from airflow.sdk import task
-
-import config
-
-
-dotenv.load_dotenv(override=True)
+from aws.rds import db
 
 
 def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
@@ -51,13 +45,6 @@ def benchmark_etl_daily() -> None:
     df = get_benchmark_data(from_date, to_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/benchmark_create.sql")
 
     # 3. Load into stage table
@@ -79,13 +66,6 @@ def benchmark_etl_backfill(from_date: dt.date, to_date: dt.date) -> None:
     df = get_benchmark_data(from_date, to_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/benchmark_create.sql")
 
     # 3. Load into stage table
@@ -110,13 +90,6 @@ def benchmark_etl_reload() -> None:
     df = get_benchmark_data(from_date, to_date)
 
     # 2. Create core table if not exists
-    db = aws.RDS(
-        db_endpoint=os.getenv("DB_ENDPOINT"),
-        db_name=os.getenv("DB_NAME"),
-        db_user=os.getenv("DB_USER"),
-        db_password=os.getenv("DB_PASSWORD"),
-        db_port=os.getenv("DB_PORT"),
-    )
     db.execute_sql_file("dags/sql/benchmark_create.sql")
 
     # 3. Load into stage table
