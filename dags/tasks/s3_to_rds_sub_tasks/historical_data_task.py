@@ -85,7 +85,8 @@ def historical_data_upload(
                 .alias("report_date"),
                 pl.col("ticker").alias("symbol"),
                 pl.col("price").cast(pl.Float64).alias("mark_price"),
-                pl.col("daily_return").cast(pl.Float64),
+                # divide by 100 to convert from percent to decimal. This is how other returns are handled in RDS.
+                (pl.col("daily_return").cast(pl.Float64) / 100).alias("daily_return"),
                 pl.col("currency"),
             )
             .cast(historical_data_schema)
