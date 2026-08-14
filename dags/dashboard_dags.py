@@ -32,7 +32,10 @@ from airflow.sdk import dag, get_current_context, task
 default_args = {"on_failure_callback": slack_on_failure}
 
 
-@dag(schedule="0 4 * * *", max_active_tasks=1, default_args=default_args)
+# Runs at 10am UTC every day. (this translates to 3am MST),
+# we need to run this after 2 AM MST because that is when the historical data pipeline runs on the fulton.
+# Barra data is uploaded to the fulton usually between 1 and 2 AM MST
+@dag(schedule="0 10 * * *", max_active_tasks=1, default_args=default_args)
 def dashboard_dag_daily():
     [
         [ibkr_to_s3_daily() >> s3_to_rds_daily(), calendar_etl_daily()]
