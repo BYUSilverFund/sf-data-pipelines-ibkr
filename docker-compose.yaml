@@ -70,7 +70,7 @@ x-airflow-common: &airflow-common
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     AIRFLOW__CORE__TEST_CONNECTION: "Enabled"
     AIRFLOW_CONFIG: "/opt/airflow/config/airflow.cfg"
-    AIRFLOW_CONN_POSTGRES_DBT_CONN: "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_ENDPOINT}:${DB_PORT}/${DB_NAME}"
+    AIRFLOW_CONN_POSTGRES_RDS_CONN: "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_ENDPOINT}:${DB_PORT}/${DB_NAME}"
     PYTHONPATH: "/opt/airflow/dags"
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
