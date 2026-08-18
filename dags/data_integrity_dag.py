@@ -6,7 +6,7 @@ from airflow.providers.common.sql.operators.sql import SQLColumnCheckOperator
 from airflow.providers.common.sql.hooks.sql import DbApiHook
 from slack_notifier import slack_on_failure
 
-CONN_ID = "postgres_dbt_conn"
+CONN_ID = "postgres_rds_conn"
 default_args = {"on_failure_callback": slack_on_failure}
 
 
@@ -417,19 +417,277 @@ def data_integrity_pipeline():
                 f"Found {len(failing_rows)} rows in benchmark with invalid daily return calculations!"
             )
 
+    @task(task_id="fund_returns_math")
+    def fund_returns_math():
+        hook = DbApiHook.get_hook(CONN_ID)
+        sql = """
+            -- Verifies fund_returns daily return per client_account_id matches delta_nav cashflow formula:
+            -- (ending_value - starting_value - deposits_withdrawals) / starting_value.
+            WITH delta_nav_acc AS (
+                SELECT 
+                    date,
+                    client_account_id,
+                    starting_value,
+                    ending_value,
+                    deposits_withdrawals,
+                    dividends
+                FROM delta_nav
+                -- Exclude values for quant paper account
+                WHERE client_account_id != 'DU8843649'
+            ),
+            fund_acc_joined AS (
+                SELECT 
+                    f.date,
+                    f.client_account_id,
+                    f.value AS fund_value,
+                    f.return AS actual_return,
+                    d.starting_value,
+                    d.ending_value,
+                    d.deposits_withdrawals,
+                    d.dividends,
+                    CASE 
+                        WHEN d.starting_value IS NOT NULL AND d.starting_value > 0
+                        THEN (d.ending_value - d.starting_value - d.deposits_withdrawals) / d.starting_value
+                        ELSE NULL
+                    END AS expected_return
+                FROM fund_returns f
+                JOIN calendar c ON f.date = c.date
+                JOIN delta_nav_acc d ON f.date = d.date AND f.client_account_id = d.client_account_id
+                WHERE f.client_account_id != 'DU8843649'
+                  AND f.date != '2020-07-17'
+            )
+            SELECT 
+                date,
+                client_account_id,
+                fund_value,
+                starting_value,
+                ending_value,
+                deposits_withdrawals,
+                actual_return,
+                expected_return,
+                ABS(actual_return - expected_return) AS diff
+            FROM fund_acc_joined
+            -- Tolerance threshold (1.0%): Accounts for minor post-holiday IBKR starting value shifts per account.
+            WHERE expected_return IS NOT NULL
+              AND ABS(actual_return - expected_return) > 0.01
+            ORDER BY date DESC, client_account_id;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      FUND_RETURNS DAILY RETURN PER ACCOUNT MISMATCHES DETECTED",
+                "=" * 90,
+            ]
+            for (
+                date,
+                account,
+                fund_val,
+                start_val,
+                end_val,
+                dep_with,
+                act_ret,
+                exp_ret,
+                diff,
+            ) in failing_rows:
+                error_msg.append(
+                    f"Date: {date} | Account: {account} | FundVal: {fund_val:,.2f} | StartVal: {start_val:,.2f} | EndVal: {end_val:,.2f} | DepWith: {dep_with:,.2f}\n"
+                    f"   -> Actual Return: {act_ret:.6f} | Expected Return: {exp_ret:.6f} | Diff: {diff:.6f}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} rows in fund_returns where account daily return does not match delta_nav formula!"
+            )
+
+    @task(task_id="delta_nav_vs_fund_returns")
+    def delta_nav_vs_fund_returns():
+        hook = DbApiHook.get_hook(CONN_ID)
+        sql = """
+            -- Compares delta_nav ending values (net of deposits/withdrawals) per client_account_id against fund_returns.
+            -- Verifies (delta_nav.ending_value - delta_nav.deposits_withdrawals) on date_t equals fund_returns.value on date_t for each account.
+            WITH delta_nav_acc AS (
+                SELECT 
+                    date,
+                    client_account_id,
+                    starting_value,
+                    ending_value,
+                    deposits_withdrawals,
+                    dividends
+                FROM delta_nav
+                -- Exclude values for quant paper account
+                WHERE client_account_id != 'DU8843649'
+            ),
+            fund_acc AS (
+                SELECT 
+                    date,
+                    client_account_id,
+                    value AS fund_value,
+                    return AS fund_return
+                FROM fund_returns
+                WHERE client_account_id != 'DU8843649'
+            ),
+            all_account_dates AS (
+                SELECT date, client_account_id FROM delta_nav_acc
+                UNION
+                SELECT date, client_account_id FROM fund_acc
+            ),
+            trading_day_checks AS (
+                SELECT 
+                    ad.date,
+                    ad.client_account_id,
+                    d.starting_value,
+                    d.ending_value,
+                    d.deposits_withdrawals,
+                    f.fund_value,
+                    CASE WHEN d.ending_value IS NOT NULL AND f.fund_value IS NOT NULL 
+                         THEN ABS((d.ending_value - d.deposits_withdrawals) - f.fund_value) ELSE NULL END AS ending_val_diff
+                FROM all_account_dates ad
+                JOIN calendar c ON ad.date = c.date
+                LEFT JOIN delta_nav_acc d ON ad.date = d.date AND ad.client_account_id = d.client_account_id
+                LEFT JOIN fund_acc f ON ad.date = f.date AND ad.client_account_id = f.client_account_id
+                WHERE ad.date != '2020-07-17'
+            )
+            SELECT 
+                date,
+                client_account_id,
+                COALESCE(starting_value, 0) AS starting_value,
+                COALESCE(ending_value - deposits_withdrawals, 0) AS expected_fund_value,
+                COALESCE(fund_value, 0) AS fund_value,
+                COALESCE(ending_val_diff, 0) AS ending_val_diff,
+                CASE 
+                    WHEN ending_value IS NULL THEN 'MISSING_IN_DELTA_NAV'
+                    WHEN fund_value IS NULL THEN 'MISSING_IN_FUND_RETURNS'
+                    WHEN ending_val_diff > 0.01 
+                        THEN 'ENDING_VAL_MISMATCH (delta_nav.ending - deposits != fund.value)'
+                END AS failure_reason
+            FROM trading_day_checks
+            WHERE ending_value IS NULL 
+               OR fund_value IS NULL
+               OR ending_val_diff > 0.01
+            ORDER BY date DESC, client_account_id;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      DELTA_NAV VS FUND_RETURNS VALUE ALIGNMENT MISMATCHES DETECTED",
+                "=" * 90,
+            ]
+            for (
+                date,
+                account,
+                start_val,
+                exp_fund,
+                fund_val,
+                diff,
+                reason,
+            ) in failing_rows:
+                error_msg.append(
+                    f"Date: {date} | Account: {account} | Reason: {reason}\n"
+                    f"   -> StartingVal (delta_nav): {start_val:,.2f} | ExpectedFundVal: {exp_fund:,.2f} | FundVal: {fund_val:,.2f} | Diff: {diff:,.2f}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} account rows where delta_nav does not match fund_returns!"
+            )
+
+    @task(task_id="positions_vs_historical_symbols")
+    def positions_vs_historical_symbols():
+        hook = DbApiHook.get_hook(CONN_ID)
+        sql = """
+            -- Deduplicates positions by (symbol, report_date) and joins to historical_data on symbol AND report_date
+            -- across ALL historical dates to verify mark_price is identical.
+            WITH pos_deduped AS (
+                SELECT 
+                    symbol,
+                    report_date,
+                    MAX(mark_price) AS mark_price
+                FROM positions
+                GROUP BY symbol, report_date
+            ),
+            hist_deduped AS (
+                SELECT 
+                    symbol,
+                    report_date,
+                    MAX(mark_price) AS mark_price
+                FROM historical_data
+                GROUP BY symbol, report_date
+            ),
+            joined AS (
+                SELECT 
+                    p.report_date,
+                    p.symbol,
+                    p.mark_price AS pos_mark_price,
+                    h.mark_price AS hist_mark_price,
+                    ABS(p.mark_price - h.mark_price) AS price_diff
+                FROM pos_deduped p
+                INNER JOIN hist_deduped h ON p.symbol = h.symbol AND p.report_date = h.report_date
+            )
+            SELECT 
+                report_date,
+                symbol,
+                pos_mark_price,
+                hist_mark_price,
+                price_diff,
+                'MARK_PRICE_MISMATCH' AS failure_reason
+            FROM joined
+            WHERE price_diff > 0
+              AND (
+                  (pos_mark_price > 0.01 AND (price_diff / pos_mark_price) > 0.05)
+               OR (pos_mark_price <= 0.01 AND price_diff > 0.01)
+              )
+            ORDER BY report_date DESC, symbol;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      POSITIONS VS HISTORICAL_DATA MARK_PRICE MISMATCHES DETECTED",
+                "=" * 90,
+            ]
+            for date, symbol, pos_price, hist_price, diff, reason in failing_rows:
+                error_msg.append(
+                    f"Date: {date} | Symbol: {symbol:<15} | PosPrice: {pos_price:,.2f} | HistPrice: {hist_price:,.2f} | Diff: {diff:,.2f} | Reason: {reason}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} rows where mark_price does not match between positions and historical_data!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
     task_delta_nav_vs_all_fund = delta_nav_vs_all_fund_returns()
     task_all_fund_math = all_fund_returns_math()
     task_all_fund_divs = all_fund_returns_dividends_match()
+    task_fund_returns_math = fund_returns_math()
+    task_delta_nav_vs_fund = delta_nav_vs_fund_returns()
     task_benchmark_math = benchmark_math()
+    task_positions_vs_hist_symbols = positions_vs_historical_symbols()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
         task_all_fund_math,
         task_all_fund_divs,
+        task_fund_returns_math,
+        task_delta_nav_vs_fund,
         task_benchmark_math,
+        task_positions_vs_hist_symbols,
     ]
 
 
