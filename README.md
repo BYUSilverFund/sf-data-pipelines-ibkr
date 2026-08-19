@@ -137,7 +137,7 @@ ruff check --fix
 
 - **`dashboard_dag_daily`** *(Schedule: `0 10 * * *` / 3:00 AM MST)*: Primary daily pipeline. 
   From IBKR
-    - Flex Statements (Positions, Trades, Deposits, Withdrawals, Dividends) -> S3 -> RDS (tables: positions, trades, dividends, delta_nav, all_fund_returns, fund_returns)
+    - Flex Statements -> S3 (ibkr-flex-query-files) -> RDS (tables: positions, trades, dividends, delta_nav, all_fund_returns, fund_returns)
   From S3 (barra-stock-history)
     - Historical Barra Stock Prices -> RDS (tables: historical_data, symbol_barra_mapping)
   From FRED
@@ -151,5 +151,6 @@ ruff check --fix
   - Return Math Verification (`all_fund_returns_math`, `fund_returns_math`, `benchmark_math`) -> ensures returns in tables were calculated correctly
   - Dividend Reconciliation (`all_fund_returns_dividends_match`) -> checks dividends across tables match.
   - Historical Price Integrity (`positions_vs_historical_symbols`) -> Verifies that our historical data mark_price matches position mark_price for the same symbol every day (within 5% variance and $0.01 for sub-cent stocks)
+  - Trade vs Position Reconciliation (`trades_vs_positions_qty`) -> Verifies daily position quantity changes match net executed trade volume
 - **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
 - **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
