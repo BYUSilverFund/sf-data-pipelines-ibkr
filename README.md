@@ -140,6 +140,8 @@ ruff check --fix
     - Flex Statements -> S3 (ibkr-flex-query-files) -> RDS (tables: positions, trades, dividends, delta_nav, all_fund_returns, fund_returns)
   From S3 (barra-stock-history)
     - Historical Barra Stock Prices -> RDS (tables: historical_data, symbol_barra_mapping)
+  From NYSE Market Calendar (`pandas_market_calendars`)
+    - Trading Calendar Schedule -> RDS (tables: calendar)
   From FRED
     - Risk Free Rate -> RDS (tables: risk_free_rate)
   From Yahoo Finance
@@ -154,5 +156,6 @@ ruff check --fix
   - Trade vs Position Reconciliation (`trades_vs_positions_qty`) -> Verifies daily position quantity changes match net executed trade volume
   - Dividend Account Reconciliation (`orphan_dividends`) -> Ensures all dividend payouts are attributed to valid registered client accounts
   - Zero/Negative NAV Check (`zero_negative_nav`) -> Flags invalid zero or negative account ending NAV values in delta_nav
+  - Future Date & Data Freshness (`date_sync_across_tables`) -> Ensures no dates are in the future and all max(date) for each table match.
 - **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
 - **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
