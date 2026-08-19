@@ -761,6 +761,49 @@ def data_integrity_pipeline():
                 f"Found {len(failing_rows)} position quantity discrepancies against executed trades!"
             )
 
+    @task
+    def orphan_dividends():
+        """
+        Ensures all client account IDs receiving dividend payouts in dividends table
+        exist as registered active accounts in delta_nav.
+        Flags orphan dividend transactions attributed to unknown/unmapped accounts.
+        """
+        hook = PostgresHook(postgres_conn_id=CONN_ID)
+        sql = """
+            SELECT DISTINCT
+                d.report_date,
+                d.client_account_id,
+                d.symbol,
+                d.net_amount
+            FROM dividends d
+            LEFT JOIN (
+                SELECT DISTINCT client_account_id FROM delta_nav
+            ) n ON d.client_account_id = n.client_account_id
+            WHERE n.client_account_id IS NULL
+              AND d.client_account_id != 'DU8843649'
+            ORDER BY d.report_date DESC, d.client_account_id, d.symbol;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      ORPHAN DIVIDENDS DETECTED (UNKNOWN CLIENT ACCOUNTS)",
+                "=" * 90,
+            ]
+            for date, account, symbol, net_amount in failing_rows:
+                error_msg.append(
+                    f"Date: {date} | Account: {account:<15} | Symbol: {symbol:<10} | NetAmount: ${net_amount:,.2f}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} orphan dividend entries for unregistered client accounts!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
@@ -772,6 +815,7 @@ def data_integrity_pipeline():
     task_benchmark_math = benchmark_math()
     task_positions_vs_hist_symbols = positions_vs_historical_symbols()
     task_trades_vs_positions = trades_vs_positions_qty()
+    task_orphan_divs = orphan_dividends()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
@@ -782,6 +826,7 @@ def data_integrity_pipeline():
         task_benchmark_math,
         task_positions_vs_hist_symbols,
         task_trades_vs_positions,
+        task_orphan_divs,
     ]
 
 
