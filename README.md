@@ -132,3 +132,24 @@ Auto-fix linting issues:
 ```bash
 ruff check --fix
 ```
+
+### DAGS
+
+- **`dashboard_dag_daily`** *(Schedule: `0 10 * * *` / 3:00 AM MST)*: Primary daily pipeline. 
+  From IBKR
+    - Flex Statements (Positions, Trades, Deposits, Withdrawals, Dividends) -> S3 -> RDS (tables: positions, trades, dividends, delta_nav, all_fund_returns, fund_returns)
+  From S3 (barra-stock-history)
+    - Historical Barra Stock Prices -> RDS (tables: historical_data, symbol_barra_mapping)
+  From FRED
+    - Risk Free Rate -> RDS (tables: risk_free_rate)
+  From Yahoo Finance
+    - IWV Benchmark Prices -> RDS (tables: benchmark)
+    
+- **`data_integrity`**: Automated quality validation DAG. Runs the following integrity checks:
+  - Table Structure (`table_structure_validation`) -> Verifies required RDS table schemas exist
+  - NAV Consistency (`delta_nav_vs_all_fund_returns`, `delta_nav_vs_fund_returns`) -> fund return tables are built from delta_nav, this checks that they were built correctly
+  - Return Math Verification (`all_fund_returns_math`, `fund_returns_math`, `benchmark_math`) -> ensures returns in tables were calculated correctly
+  - Dividend Reconciliation (`all_fund_returns_dividends_match`) -> checks dividends across tables match.
+  - Historical Price Integrity (`positions_vs_historical_symbols`) -> Verifies that our historical data mark_price matches position mark_price for the same symbol every day (within 5% variance and $0.01 for sub-cent stocks)
+- **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
+- **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
