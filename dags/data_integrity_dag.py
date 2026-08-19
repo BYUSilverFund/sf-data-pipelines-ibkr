@@ -1,6 +1,7 @@
 import datetime as dt
 
 from airflow.decorators import dag, task
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.task_group import TaskGroup
 from airflow.providers.common.sql.operators.sql import SQLColumnCheckOperator
 from airflow.providers.common.sql.hooks.sql import DbApiHook
@@ -669,6 +670,97 @@ def data_integrity_pipeline():
                 f"Found {len(failing_rows)} rows where mark_price does not match between positions and historical_data!"
             )
 
+    @task
+    def trades_vs_positions_qty():
+        """
+        Reconciles daily position quantity changes (pos_qty_t - pos_qty_t-1)
+        against total executed trade volume in trades table per account and symbol
+        for recent trading days (within the last 14 days).
+        Flags discrepancies caused by missing trades or unhandled corporate actions.
+        """
+        hook = PostgresHook(postgres_conn_id=CONN_ID)
+        sql = """
+            WITH daily_pos AS (
+                SELECT 
+                    report_date,
+                    client_account_id,
+                    symbol,
+                    SUM(quantity) AS pos_qty,
+                    LAG(SUM(quantity)) OVER (PARTITION BY client_account_id, symbol ORDER BY report_date) AS prev_pos_qty,
+                    LAG(report_date) OVER (PARTITION BY client_account_id, symbol ORDER BY report_date) AS prev_date
+                FROM positions
+                WHERE client_account_id != 'DU8843649'
+                GROUP BY report_date, client_account_id, symbol
+            ),
+            daily_trades AS (
+                SELECT 
+                    report_date,
+                    client_account_id,
+                    symbol,
+                    SUM(quantity) AS trade_qty
+                FROM trades
+                WHERE client_account_id != 'DU8843649'
+                GROUP BY report_date, client_account_id, symbol
+            ),
+            reconciled AS (
+                SELECT 
+                    p.report_date,
+                    p.prev_date,
+                    p.client_account_id,
+                    p.symbol,
+                    p.prev_pos_qty,
+                    p.pos_qty,
+                    COALESCE(t.trade_qty, 0) AS trade_qty,
+                    (p.pos_qty - COALESCE(p.prev_pos_qty, 0)) AS actual_qty_change
+                FROM daily_pos p
+                LEFT JOIN daily_trades t 
+                  ON p.report_date = t.report_date 
+                 AND p.client_account_id = t.client_account_id 
+                 AND p.symbol = t.symbol
+                WHERE p.prev_date IS NOT NULL
+                  AND p.report_date >= CURRENT_DATE - INTERVAL '14 days'
+            )
+            SELECT 
+                report_date,
+                client_account_id,
+                symbol,
+                prev_pos_qty,
+                pos_qty,
+                actual_qty_change,
+                trade_qty
+            FROM reconciled
+            WHERE actual_qty_change != trade_qty
+            ORDER BY report_date DESC, client_account_id, symbol;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      TRADES VS POSITIONS QUANTITY DISCREPANCIES DETECTED",
+                "=" * 90,
+            ]
+            for (
+                date,
+                account,
+                symbol,
+                prev_qty,
+                curr_qty,
+                actual_change,
+                trade_qty,
+            ) in failing_rows:
+                error_msg.append(
+                    f"Date: {date} | Account: {account} | Symbol: {symbol:<10} | PrevQty: {prev_qty} | CurrQty: {curr_qty} | QtyChange: {actual_change} | TradeQty: {trade_qty}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} position quantity discrepancies against executed trades!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
@@ -679,6 +771,7 @@ def data_integrity_pipeline():
     task_delta_nav_vs_fund = delta_nav_vs_fund_returns()
     task_benchmark_math = benchmark_math()
     task_positions_vs_hist_symbols = positions_vs_historical_symbols()
+    task_trades_vs_positions = trades_vs_positions_qty()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
@@ -688,6 +781,7 @@ def data_integrity_pipeline():
         task_delta_nav_vs_fund,
         task_benchmark_math,
         task_positions_vs_hist_symbols,
+        task_trades_vs_positions,
     ]
 
 
