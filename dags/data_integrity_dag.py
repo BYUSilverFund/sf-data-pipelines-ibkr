@@ -846,6 +846,143 @@ def data_integrity_pipeline():
                 f"Found {len(failing_rows)} zero or negative NAV entries in delta_nav!"
             )
 
+    @task
+    def date_sync_across_tables():
+        """
+        1. Scans core tables for any future-dated records (report_date/date > CURRENT_DATE).
+        2. Ensures data is up-to-date by comparing MAX(date) across positions, historical_data,
+           holding_returns, fund_returns, all_fund_returns, and risk_free_rate against the latest
+           trading calendar date (calendar.date).
+        """
+        hook = PostgresHook(postgres_conn_id=CONN_ID)
+
+        # 1. Future date check
+        future_sql = """
+            SELECT 'positions' AS table_name, COUNT(*) AS future_count FROM positions WHERE report_date > CURRENT_DATE
+            UNION ALL
+            SELECT 'trades', COUNT(*) FROM trades WHERE report_date > CURRENT_DATE
+            UNION ALL
+            SELECT 'dividends', COUNT(*) FROM dividends WHERE report_date > CURRENT_DATE
+            UNION ALL
+            SELECT 'delta_nav', COUNT(*) FROM delta_nav WHERE date > CURRENT_DATE
+            UNION ALL
+            SELECT 'historical_data', COUNT(*) FROM historical_data WHERE report_date > CURRENT_DATE
+            UNION ALL
+            SELECT 'holding_returns', COUNT(*) FROM holding_returns WHERE date > CURRENT_DATE
+            UNION ALL
+            SELECT 'fund_returns', COUNT(*) FROM fund_returns WHERE date > CURRENT_DATE
+            UNION ALL
+            SELECT 'all_fund_returns', COUNT(*) FROM all_fund_returns WHERE date > CURRENT_DATE
+            UNION ALL
+            SELECT 'risk_free_rate', COUNT(*) FROM risk_free_rate WHERE date > CURRENT_DATE
+            UNION ALL
+            SELECT 'benchmark', COUNT(*) FROM benchmark WHERE date > CURRENT_DATE;
+        """
+        future_rows = hook.get_records(future_sql)
+        future_failures = [(tbl, cnt) for tbl, cnt in future_rows if cnt > 0]
+
+        # 2. Freshness / max date synchronicity check against calendar table
+        freshness_sql = """
+            WITH max_dates AS (
+                SELECT 
+                    (SELECT MAX(date) FROM calendar) AS max_calendar,
+                    (SELECT MAX(date) FROM calendar WHERE date < (SELECT MAX(date) FROM calendar)) AS prev_calendar,
+                    (SELECT MAX(report_date) FROM positions) AS max_positions,
+                    (SELECT MAX(report_date) FROM historical_data) AS max_historical_data,
+                    (SELECT MAX(date) FROM holding_returns) AS max_holding_returns,
+                    (SELECT MAX(date) FROM fund_returns) AS max_fund_returns,
+                    (SELECT MAX(date) FROM all_fund_returns) AS max_all_fund_returns,
+                    (SELECT MAX(date) FROM risk_free_rate) AS max_risk_free_rate
+            )
+            SELECT 
+                max_calendar,
+                prev_calendar,
+                max_positions,
+                max_historical_data,
+                max_holding_returns,
+                max_fund_returns,
+                max_all_fund_returns,
+                max_risk_free_rate,
+                CASE WHEN max_positions != max_calendar THEN 'POSITIONS_STALE' END AS pos_err,
+                CASE WHEN max_historical_data != max_calendar THEN 'HISTORICAL_DATA_STALE' END AS hist_err,
+                CASE WHEN max_holding_returns != max_calendar THEN 'HOLDING_RETURNS_STALE' END AS hold_err,
+                CASE WHEN max_fund_returns != max_calendar THEN 'FUND_RETURNS_STALE' END AS fund_err,
+                CASE WHEN max_all_fund_returns != max_calendar THEN 'ALL_FUND_RETURNS_STALE' END AS all_fund_err,
+                CASE WHEN max_risk_free_rate < prev_calendar THEN 'RISK_FREE_RATE_STALE' END AS rfr_err
+            FROM max_dates;
+        """
+        freshness_row = hook.get_records(freshness_sql)[0]
+        (
+            max_cal,
+            prev_cal,
+            max_pos,
+            max_hist,
+            max_hold,
+            max_fund,
+            max_all_fund,
+            max_rfr,
+            pos_err,
+            hist_err,
+            hold_err,
+            fund_err,
+            all_fund_err,
+            rfr_err,
+        ) = freshness_row
+
+        stale_errors = [
+            err
+            for err in [
+                pos_err,
+                hist_err,
+                hold_err,
+                fund_err,
+                all_fund_err,
+                rfr_err,
+            ]
+            if err is not None
+        ]
+
+        if future_failures or stale_errors:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      DATA FRESHNESS AND FUTURE DATE ANOMALIES DETECTED",
+                "=" * 90,
+            ]
+            if future_failures:
+                error_msg.append("FUTURE DATED RECORDS:")
+                for tbl, cnt in future_failures:
+                    error_msg.append(f"   -> Table {tbl:<20}: {cnt} future rows")
+            if stale_errors:
+                error_msg.append(
+                    f"MAX DATE SYNCHRONICITY MISMATCHES (Latest Calendar Date: {max_cal}):"
+                )
+                error_msg.append(
+                    f"   -> positions        : {max_pos} {'[STALE]' if pos_err else '[OK]'}"
+                )
+                error_msg.append(
+                    f"   -> historical_data  : {max_hist} {'[STALE]' if hist_err else '[OK]'}"
+                )
+                error_msg.append(
+                    f"   -> holding_returns  : {max_hold} {'[STALE]' if hold_err else '[OK]'}"
+                )
+                error_msg.append(
+                    f"   -> fund_returns     : {max_fund} {'[STALE]' if fund_err else '[OK]'}"
+                )
+                error_msg.append(
+                    f"   -> all_fund_returns : {max_all_fund} {'[STALE]' if all_fund_err else '[OK]'}"
+                )
+                error_msg.append(
+                    f"   -> risk_free_rate   : {max_rfr} {'[STALE]' if rfr_err else '[OK (FRED 1-day lag)]'}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Data integrity failed with {len(future_failures)} future date tables and {len(stale_errors)} stale tables!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
@@ -859,6 +996,7 @@ def data_integrity_pipeline():
     task_trades_vs_positions = trades_vs_positions_qty()
     task_orphan_divs = orphan_dividends()
     task_zero_neg_nav = zero_negative_nav()
+    task_future_date = date_sync_across_tables()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
@@ -871,6 +1009,7 @@ def data_integrity_pipeline():
         task_trades_vs_positions,
         task_orphan_divs,
         task_zero_neg_nav,
+        task_future_date,
     ]
 
 
