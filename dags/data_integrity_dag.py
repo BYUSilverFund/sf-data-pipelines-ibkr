@@ -804,6 +804,48 @@ def data_integrity_pipeline():
                 f"Found {len(failing_rows)} orphan dividend entries for unregistered client accounts!"
             )
 
+    @task
+    def zero_negative_nav():
+        """
+        Scans delta_nav for any client account record where ending_value <= 0
+        or starting_value <= 0 without a cash deposit (excluding demo account DU8843649).
+        Flags account NAV anomalies that break return calculations.
+        """
+        hook = PostgresHook(postgres_conn_id=CONN_ID)
+        sql = """
+            SELECT 
+                date,
+                client_account_id,
+                starting_value,
+                ending_value,
+                deposits_withdrawals,
+                dividends
+            FROM delta_nav
+            WHERE (ending_value <= 0 OR (starting_value <= 0 AND deposits_withdrawals <= 0))
+              AND client_account_id != 'DU8843649'
+            ORDER BY date DESC, client_account_id;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      ZERO OR NEGATIVE NAV ANOMALIES DETECTED IN DELTA_NAV",
+                "=" * 90,
+            ]
+            for dt_val, account, start_val, end_val, dep_with, divs in failing_rows:
+                error_msg.append(
+                    f"Date: {dt_val} | Account: {account:<15} | StartNAV: ${start_val:,.2f} | EndNAV: ${end_val:,.2f} | Flow: ${dep_with:,.2f}"
+                )
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} zero or negative NAV entries in delta_nav!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
@@ -816,6 +858,7 @@ def data_integrity_pipeline():
     task_positions_vs_hist_symbols = positions_vs_historical_symbols()
     task_trades_vs_positions = trades_vs_positions_qty()
     task_orphan_divs = orphan_dividends()
+    task_zero_neg_nav = zero_negative_nav()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
@@ -827,6 +870,7 @@ def data_integrity_pipeline():
         task_positions_vs_hist_symbols,
         task_trades_vs_positions,
         task_orphan_divs,
+        task_zero_neg_nav,
     ]
 
 

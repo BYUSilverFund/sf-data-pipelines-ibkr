@@ -153,5 +153,6 @@ ruff check --fix
   - Historical Price Integrity (`positions_vs_historical_symbols`) -> Verifies that our historical data mark_price matches position mark_price for the same symbol every day (within 5% variance and $0.01 for sub-cent stocks)
   - Trade vs Position Reconciliation (`trades_vs_positions_qty`) -> Verifies daily position quantity changes match net executed trade volume
   - Dividend Account Reconciliation (`orphan_dividends`) -> Ensures all dividend payouts are attributed to valid registered client accounts
+  - Zero/Negative NAV Check (`zero_negative_nav`) -> Flags invalid zero or negative account ending NAV values in delta_nav
 - **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
 - **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
