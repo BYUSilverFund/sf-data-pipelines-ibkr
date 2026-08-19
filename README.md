@@ -157,5 +157,6 @@ ruff check --fix
   - Dividend Account Reconciliation (`orphan_dividends`) -> Ensures all dividend payouts are attributed to valid registered client accounts
   - Zero/Negative NAV Check (`zero_negative_nav`) -> Flags invalid zero or negative account ending NAV values in delta_nav
   - Future Date & Data Freshness (`date_sync_across_tables`) -> Ensures no dates are in the future and all max(date) for each table match.
+  - Trading Calendar Completeness (`missing_calendar_dates`) -> Verifies every NYSE trading date since 2023-07-17 is present in positions, holding_returns, fund_returns, and all_fund_returns
 - **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
 - **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
