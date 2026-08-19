@@ -983,6 +983,67 @@ def data_integrity_pipeline():
                 f"Data integrity failed with {len(future_failures)} future date tables and {len(stale_errors)} stale tables!"
             )
 
+    @task
+    def missing_calendar_dates():
+        """
+        Ensures all trading days in calendar since 2023-07-17 are covered in
+        positions, holding_returns, fund_returns, and all_fund_returns.
+        Flags missing trading dates in materializations and position data.
+        """
+        hook = PostgresHook(postgres_conn_id=CONN_ID)
+        sql = """
+            WITH trading_days AS (
+                SELECT date 
+                FROM calendar 
+                WHERE date >= '2023-07-17' AND date <= (SELECT MAX(date) FROM calendar)
+            )
+            SELECT 'all_fund_returns' AS table_name, c.date AS missing_date
+            FROM trading_days c
+            LEFT JOIN (SELECT DISTINCT date FROM all_fund_returns) a ON c.date = a.date
+            WHERE a.date IS NULL
+
+            UNION ALL
+
+            SELECT 'fund_returns' AS table_name, c.date AS missing_date
+            FROM trading_days c
+            LEFT JOIN (SELECT DISTINCT date FROM fund_returns) f ON c.date = f.date
+            WHERE f.date IS NULL
+
+            UNION ALL
+
+            SELECT 'holding_returns' AS table_name, c.date AS missing_date
+            FROM trading_days c
+            LEFT JOIN (SELECT DISTINCT date FROM holding_returns) h ON c.date = h.date
+            WHERE h.date IS NULL
+
+            UNION ALL
+
+            SELECT 'positions' AS table_name, c.date AS missing_date
+            FROM trading_days c
+            LEFT JOIN (SELECT DISTINCT report_date AS date FROM positions) p ON c.date = p.date
+            WHERE p.date IS NULL
+
+            ORDER BY table_name, missing_date DESC;
+        """
+        failing_rows = hook.get_records(sql)
+
+        if failing_rows:
+            import logging
+
+            logger = logging.getLogger("airflow.task")
+            error_msg = [
+                "\n" + "=" * 90,
+                "      MISSING TRADING CALENDAR DATES DETECTED (SINCE 2023-07-17)",
+                "=" * 90,
+            ]
+            for tbl, dt_val in failing_rows:
+                error_msg.append(f"Table: {tbl:<20} | Missing Trading Date: {dt_val}")
+            error_msg.append("=" * 90)
+            logger.error("\n".join(error_msg))
+            raise ValueError(
+                f"Found {len(failing_rows)} missing trading calendar date entries across portfolio tables!"
+            )
+
     # -------------------------------------------------------------------------
     # DAG FLOW DEPENDENCIES
     # -------------------------------------------------------------------------
@@ -997,6 +1058,7 @@ def data_integrity_pipeline():
     task_orphan_divs = orphan_dividends()
     task_zero_neg_nav = zero_negative_nav()
     task_future_date = date_sync_across_tables()
+    task_missing_dates = missing_calendar_dates()
 
     table_structure_validation >> [
         task_delta_nav_vs_all_fund,
@@ -1010,6 +1072,7 @@ def data_integrity_pipeline():
         task_orphan_divs,
         task_zero_neg_nav,
         task_future_date,
+        task_missing_dates,
     ]
 
 
