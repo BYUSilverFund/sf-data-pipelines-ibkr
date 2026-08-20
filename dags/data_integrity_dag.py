@@ -680,6 +680,7 @@ def data_integrity_pipeline():
         """
         hook = PostgresHook(postgres_conn_id=CONN_ID)
         sql = """
+            -- Ensures daily position quantity changes match the executed trade volume in trades table per account and symbol.
             WITH daily_pos AS (
                 SELECT 
                     report_date,
@@ -770,6 +771,7 @@ def data_integrity_pipeline():
         """
         hook = PostgresHook(postgres_conn_id=CONN_ID)
         sql = """
+            -- Checks for dividend payouts attributed to client accounts not registered in delta_nav.
             SELECT DISTINCT
                 d.report_date,
                 d.client_account_id,
@@ -813,6 +815,7 @@ def data_integrity_pipeline():
         """
         hook = PostgresHook(postgres_conn_id=CONN_ID)
         sql = """
+            -- Checks for zero or negative NAV entries in delta_nav that would break return calculations.
             SELECT 
                 date,
                 client_account_id,
@@ -858,6 +861,7 @@ def data_integrity_pipeline():
 
         # 1. Future date check
         future_sql = """
+            -- Checks for future-dated records across core portfolio tables.
             SELECT 'positions' AS table_name, COUNT(*) AS future_count FROM positions WHERE report_date > CURRENT_DATE
             UNION ALL
             SELECT 'trades', COUNT(*) FROM trades WHERE report_date > CURRENT_DATE
@@ -883,6 +887,7 @@ def data_integrity_pipeline():
 
         # 2. Freshness / max date synchronicity check against calendar table
         freshness_sql = """
+            -- Compares max report dates across core portfolio tables against the latest calendar trading date.
             WITH max_dates AS (
                 SELECT 
                     (SELECT MAX(date) FROM calendar) AS max_calendar,
@@ -992,6 +997,7 @@ def data_integrity_pipeline():
         """
         hook = PostgresHook(postgres_conn_id=CONN_ID)
         sql = """
+            -- Checks for missing trading dates in positions, holding_returns, fund_returns, and all_fund_returns.
             WITH trading_days AS (
                 SELECT date 
                 FROM calendar 
