@@ -15,7 +15,13 @@ def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
         "Dividends": "dividends_per_share",
     }
 
-    data = yf.download(tickers=["IWV"], start=start_date, end=end_date, actions=True)
+    query_end = end_date + dt.timedelta(days=1)
+    data = yf.download(
+        tickers=["IWV"],
+        start=start_date.isoformat(),
+        end=query_end.isoformat(),
+        actions=True,
+    )
     if data.empty:
         df = pl.DataFrame(
             {"Date": start_date, "Ticker": "IWV", "Close": 0, "Dividends": 0}
@@ -33,6 +39,62 @@ def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
         .with_columns(pl.col("return").fill_null(0.0))
         .drop_nulls("return")
         .sort("date")
+    )
+
+
+def get_intraday_benchmark_bars(
+    start_date: dt.date, end_date: dt.date, ticker: str = "IWV"
+) -> pl.DataFrame:
+    """Fetch 1-minute intraday benchmark bars from yfinance.
+
+    Returns a Polars DataFrame with columns:
+    - bm_timestamp (pl.Datetime("us")): Naive datetime in US/Eastern (matching IBKR)
+    - benchmark_price (pl.Float64)
+    """
+    # yfinance only provides 1-minute bars for the last 29 days
+    cutoff_date = dt.date.today() - dt.timedelta(days=29)
+    if start_date < cutoff_date:
+        return pl.DataFrame(
+            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
+        )
+
+    query_end = end_date + dt.timedelta(days=1)
+    try:
+        data = yf.download(
+            tickers=[ticker],
+            start=start_date.isoformat(),
+            end=query_end.isoformat(),
+            interval="1m",
+            actions=False,
+            progress=False,
+        )
+    except Exception:
+        return pl.DataFrame(
+            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
+        )
+
+    if data.empty:
+        return pl.DataFrame(
+            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
+        )
+
+    df_pd = data.stack(future_stack=True).reset_index()
+    if "Datetime" not in df_pd.columns or "Close" not in df_pd.columns:
+        return pl.DataFrame(
+            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
+        )
+
+    ts_series = df_pd["Datetime"].dt.tz_convert("America/New_York").dt.tz_localize(None)
+
+    return (
+        pl.DataFrame(
+            {
+                "bm_timestamp": ts_series,
+                "benchmark_price": df_pd["Close"].astype(float),
+            }
+        )
+        .with_columns(pl.col("bm_timestamp").cast(pl.Datetime("us")))
+        .sort("bm_timestamp")
     )
 
 

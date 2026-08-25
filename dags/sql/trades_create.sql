@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS trades (
     trade_price NUMERIC,
     ib_commission NUMERIC,
     buy_sell TEXT,
+    trade_datetime TIMESTAMP,
+    benchmark_price NUMERIC,
     PRIMARY KEY (report_date, client_account_id, symbol, trade_id)
-)
-;
+);
+
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS trade_datetime TIMESTAMP;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS benchmark_price NUMERIC;
+

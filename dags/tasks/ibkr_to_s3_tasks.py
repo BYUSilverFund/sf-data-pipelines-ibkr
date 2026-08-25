@@ -5,9 +5,8 @@ import time
 
 import aws
 import dateutil.relativedelta as du
-import pandas as pd
+import polars as pl
 import tools
-
 from airflow.sdk import task, task_group
 from config import configs
 
@@ -61,7 +60,7 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
             config.get("fund"),
             query,
         )
-        df = pd.DataFrame()
+        df = pl.DataFrame()
 
     # 2. Save to S3
     s3 = aws.S3(
@@ -78,7 +77,6 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
 def extract_and_store_task_backfill(
     config: dict, query: str, from_date: dt.date, to_date: dt.date
 ):
-    # pass
     # 1. Pull data from IBKR with retries
     df = _retry_ibkr_call(
         tools.ibkr_query_batches,
@@ -86,7 +84,17 @@ def extract_and_store_task_backfill(
         query_id=config["queries"][query],
         from_date=from_date,
         to_date=to_date,
-    )  # 2. Save to S3
+    )
+
+    if df is None:
+        logger.info(
+            "No data returned after retries for %s %s; uploading empty file.",
+            config.get("fund"),
+            query,
+        )
+        df = pl.DataFrame()
+
+    # 2. Save to S3
     s3 = aws.S3(
         aws_access_key_id=os.getenv("USER_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("USER_SECRET_ACCESS_KEY"),

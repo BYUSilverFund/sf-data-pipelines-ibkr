@@ -11,7 +11,9 @@ INSERT INTO trades (
     quantity,
     trade_price,
     ib_commission,
-    buy_sell
+    buy_sell,
+    trade_datetime,
+    benchmark_price
 )
 SELECT
     report_date,
@@ -26,7 +28,9 @@ SELECT
     quantity,
     trade_price,
     ib_commission,
-    buy_sell
+    buy_sell,
+    trade_datetime,
+    benchmark_price
 FROM "{{stage_table}}"
 ON CONFLICT (report_date, client_account_id, symbol, trade_id)
 DO UPDATE SET
@@ -38,5 +42,7 @@ DO UPDATE SET
     quantity = EXCLUDED.quantity,
     trade_price = EXCLUDED.trade_price,
     ib_commission = EXCLUDED.ib_commission,
-    buy_sell = EXCLUDED.buy_sell
+    buy_sell = EXCLUDED.buy_sell,
+    trade_datetime = EXCLUDED.trade_datetime,
+    benchmark_price = EXCLUDED.benchmark_price
 ;

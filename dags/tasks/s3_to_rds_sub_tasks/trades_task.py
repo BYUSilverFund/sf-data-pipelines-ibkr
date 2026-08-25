@@ -7,6 +7,10 @@ import tools
 from airflow.sdk import task
 from aws.rds import db
 from aws.s3 import storage_options
+from tasks.benchmark_tasks import (
+    get_benchmark_data,
+    get_intraday_benchmark_bars,
+)
 
 
 def clean_trades_data(df: pl.DataFrame) -> pl.DataFrame:
@@ -24,6 +28,7 @@ def clean_trades_data(df: pl.DataFrame) -> pl.DataFrame:
         "TradePrice": "trade_price",
         "IBCommission": "ib_commission",
         "Buy/Sell": "buy_sell",
+        "DateTime": "trade_datetime",
     }
 
     trades_schema = {
@@ -40,17 +45,100 @@ def clean_trades_data(df: pl.DataFrame) -> pl.DataFrame:
         "trade_price": pl.Float64,
         "ib_commission": pl.Float64,
         "buy_sell": pl.String,
+        "trade_datetime": pl.Datetime("us"),
     }
 
-    return (
+    # Normalize alternate case names for DateTime if present
+    for col in ["dateTime", "tradeDateTime", "trade_datetime", "TradeDateTime"]:
+        if col in df.columns and "DateTime" not in df.columns:
+            df = df.rename({col: "DateTime"})
+
+    available_cols = [c for c in trades_column_mapping.keys() if c in df.columns]
+    current_mapping = {c: trades_column_mapping[c] for c in available_cols}
+
+    cleaned = (
         df.filter(pl.col("ClientAccountID").ne("ClientAccountID"))
-        .select(trades_column_mapping.keys())
-        .rename(trades_column_mapping)
+        .select(available_cols)
+        .rename(current_mapping)
         .filter(pl.col("buy_sell").is_in(["BUY", "SELL"]))
         .with_columns(
             pl.col("report_date").cast(pl.String).str.strptime(pl.Date, "%Y%m%d"),
         )
-        .cast(trades_schema)
+    )
+
+    if "trade_datetime" in cleaned.columns:
+        cleaned = cleaned.with_columns(
+            pl.col("trade_datetime")
+            .cast(pl.String)
+            .str.strptime(pl.Datetime("us"), "%Y%m%d;%H%M%S", strict=False)
+            .alias("trade_datetime")
+        )
+    else:
+        cleaned = cleaned.with_columns(
+            pl.lit(None).cast(pl.Datetime("us")).alias("trade_datetime")
+        )
+
+    return cleaned.cast(trades_schema)
+
+
+def attach_benchmark_price(
+    trades_df: pl.DataFrame, start_date: dt.date, end_date: dt.date
+) -> pl.DataFrame:
+    """Attaches benchmark_price to trades at their trade_datetime using 1-minute benchmark bars.
+
+    If intraday bars are unavailable (e.g. for dates > 29 days ago), falls back to daily adjusted close.
+    """
+    if trades_df.is_empty():
+        return trades_df.with_columns(
+            pl.lit(None).cast(pl.Float64).alias("benchmark_price")
+        )
+
+    bm_bars = get_intraday_benchmark_bars(start_date, end_date)
+
+    if not bm_bars.is_empty():
+        valid_trades = trades_df.filter(pl.col("trade_datetime").is_not_null())
+        null_trades = trades_df.filter(pl.col("trade_datetime").is_null())
+
+        if not valid_trades.is_empty():
+            valid_trades = (
+                valid_trades.sort("trade_datetime")
+                .join_asof(
+                    bm_bars.sort("bm_timestamp"),
+                    left_on="trade_datetime",
+                    right_on="bm_timestamp",
+                    strategy="nearest",
+                )
+                .drop("bm_timestamp")
+            )
+        else:
+            valid_trades = valid_trades.with_columns(
+                pl.lit(None).cast(pl.Float64).alias("benchmark_price")
+            )
+
+        null_trades = null_trades.with_columns(
+            pl.lit(None).cast(pl.Float64).alias("benchmark_price")
+        )
+
+        return pl.concat([valid_trades, null_trades]).cast(
+            {"benchmark_price": pl.Float64}
+        )
+
+    # Fallback to daily benchmark closing price
+    daily_bm = get_benchmark_data(start_date, end_date)
+    if not daily_bm.is_empty():
+        return (
+            trades_df.join(
+                daily_bm.select(["date", "adjusted_close"]),
+                left_on="report_date",
+                right_on="date",
+                how="left",
+            )
+            .rename({"adjusted_close": "benchmark_price"})
+            .cast({"benchmark_price": pl.Float64})
+        )
+
+    return trades_df.with_columns(
+        pl.lit(None).cast(pl.Float64).alias("benchmark_price")
     )
 
 
@@ -79,19 +167,22 @@ def trades_transform_and_load_daily():
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
     )
 
-    # 2. Create core table if not exists
+    # 2. Attach intraday benchmark price at execution time
+    df = attach_benchmark_price(df, last_market_date, last_market_date)
+
+    # 3. Create core table if not exists
     db.execute_sql_file("dags/sql/trades_create.sql")
 
-    # 3. Load into stage table
+    # 4. Load into stage table
     stage_table = f"{last_market_date}_TRADES"
     db.stage_dataframe(df, stage_table)
 
-    # 4. Merge into core table
+    # 5. Merge into core table
     db.execute_sql_template_file(
         "dags/sql/trades_merge.sql", params={"stage_table": stage_table}
     )
 
-    # 5. Drop stage table
+    # 6. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
 
 
@@ -115,19 +206,22 @@ def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
     )
 
-    # 2. Create core table if not exists
+    # 2. Attach intraday benchmark price at execution time
+    df = attach_benchmark_price(df, from_date, to_date)
+
+    # 3. Create core table if not exists
     db.execute_sql_file("dags/sql/trades_create.sql")
 
-    # 3. Load into stage table
+    # 4. Load into stage table
     stage_table = f"{from_date}_{to_date}_TRADES"
     db.stage_dataframe(df, stage_table)
 
-    # 4. Merge into core table
+    # 5. Merge into core table
     db.execute_sql_template_file(
         "dags/sql/trades_merge.sql", params={"stage_table": stage_table}
     )
 
-    # 5. Drop stage table
+    # 6. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
 
 
@@ -163,17 +257,22 @@ def trades_transform_and_load_reload():
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
     )
 
-    # 3. Create core table if not exists
+    # 3. Attach intraday benchmark price at execution time
+    min_date = df["report_date"].min() if not df.is_empty() else dt.date.today()
+    max_date = df["report_date"].max() if not df.is_empty() else dt.date.today()
+    df = attach_benchmark_price(df, min_date, max_date)
+
+    # 4. Create core table if not exists
     db.execute_sql_file("dags/sql/trades_create.sql")
 
-    # 4. Load into stage table
+    # 5. Load into stage table
     stage_table = "RELOAD_TRADES"
     db.stage_dataframe(df, stage_table)
 
-    # 5. Merge into core table
+    # 6. Merge into core table
     db.execute_sql_template_file(
         "dags/sql/trades_merge.sql", params={"stage_table": stage_table}
     )
 
-    # 6. Drop stage table
+    # 7. Drop stage table
     db.execute(f'DROP TABLE "{stage_table}";')
