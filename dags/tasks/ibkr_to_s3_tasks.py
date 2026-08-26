@@ -5,7 +5,6 @@ import time
 
 import aws
 import dateutil.relativedelta as du
-import polars as pl
 import tools
 from airflow.sdk import task, task_group
 from config import configs
@@ -54,13 +53,14 @@ def extract_and_store_task_daily(config: dict, query: str) -> None:
         to_date=last_market_date,
     )
 
-    if df is None:
+    if df is None or df.is_empty():
         logger.info(
-            "No data returned after retries for %s %s; uploading empty file.",
+            "No data returned for %s %s on %s; skipping S3 upload.",
             config.get("fund"),
             query,
+            last_market_date,
         )
-        df = pl.DataFrame()
+        return
 
     # 2. Save to S3
     s3 = aws.S3(
@@ -86,13 +86,15 @@ def extract_and_store_task_backfill(
         to_date=to_date,
     )
 
-    if df is None:
+    if df is None or df.is_empty():
         logger.info(
-            "No data returned after retries for %s %s; uploading empty file.",
+            "No data returned for %s %s (%s to %s); skipping S3 upload.",
             config.get("fund"),
             query,
+            from_date,
+            to_date,
         )
-        df = pl.DataFrame()
+        return
 
     # 2. Save to S3
     s3 = aws.S3(

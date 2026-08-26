@@ -1,10 +1,16 @@
 import datetime as dt
+import logging
+import os
 
 import config
+import dotenv
 import polars as pl
+import requests
 import yfinance as yf
 from airflow.sdk import task
 from aws.rds import db
+
+dotenv.load_dotenv(override=True)
 
 
 def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
@@ -42,58 +48,90 @@ def get_benchmark_data(start_date: dt.date, end_date: dt.date) -> pl.DataFrame:
     )
 
 
+logger = logging.getLogger(__name__)
+
+_EMPTY_INTRADAY_BM = pl.DataFrame(
+    schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
+)
+
+
 def get_intraday_benchmark_bars(
     start_date: dt.date, end_date: dt.date, ticker: str = "IWV"
 ) -> pl.DataFrame:
-    """Fetch 1-minute intraday benchmark bars from yfinance.
+    """Fetch 1-minute intraday benchmark bars from Alpaca Markets API.
 
     Returns a Polars DataFrame with columns:
     - bm_timestamp (pl.Datetime("us")): Naive datetime in US/Eastern (matching IBKR)
     - benchmark_price (pl.Float64)
     """
-    # yfinance only provides 1-minute bars for the last 29 days
-    cutoff_date = dt.date.today() - dt.timedelta(days=29)
-    if start_date < cutoff_date:
-        return pl.DataFrame(
-            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
-        )
+    api_key = (
+        os.getenv("APCA_API_KEY")
+        or os.getenv("ALPACA_API_KEY")
+        or os.getenv("APCA_API_KEY_ID")
+    )
+    secret_key = os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
 
+    if not api_key or not secret_key:
+        logger.warning("APCA_API_KEY or APCA_API_SECRET_KEY not found in environment.")
+        return _EMPTY_INTRADAY_BM
+
+    headers = {
+        "APCA-API-KEY-ID": api_key,
+        "APCA-API-SECRET-KEY": secret_key,
+        "accept": "application/json",
+    }
+
+    url = f"https://data.alpaca.markets/v2/stocks/{ticker}/bars"
     query_end = end_date + dt.timedelta(days=1)
-    try:
-        data = yf.download(
-            tickers=[ticker],
-            start=start_date.isoformat(),
-            end=query_end.isoformat(),
-            interval="1m",
-            actions=False,
-            progress=False,
-        )
-    except Exception:
-        return pl.DataFrame(
-            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
-        )
+    feed = os.getenv("ALPACA_FEED", "iex")
 
-    if data.empty:
-        return pl.DataFrame(
-            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
-        )
+    all_bars = []
+    page_token = None
 
-    df_pd = data.stack(future_stack=True).reset_index()
-    if "Datetime" not in df_pd.columns or "Close" not in df_pd.columns:
-        return pl.DataFrame(
-            schema={"bm_timestamp": pl.Datetime("us"), "benchmark_price": pl.Float64}
-        )
+    while True:
+        params = {
+            "timeframe": "1Min",
+            "start": start_date.isoformat(),
+            "end": query_end.isoformat(),
+            "feed": feed,
+            "limit": 10000,
+            "sort": "asc",
+        }
+        if page_token:
+            params["page_token"] = page_token
 
-    ts_series = df_pd["Datetime"].dt.tz_convert("America/New_York").dt.tz_localize(None)
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=30)
+            if resp.status_code != 200:
+                logger.error("Alpaca API error (%s): %s", resp.status_code, resp.text)
+                break
+
+            data = resp.json()
+            bars = data.get("bars") or []
+            all_bars.extend(bars)
+
+            page_token = data.get("next_page_token")
+            if not page_token:
+                break
+        except Exception as e:
+            logger.error("Failed to fetch bars from Alpaca: %s", e)
+            break
+
+    if not all_bars:
+        return _EMPTY_INTRADAY_BM
+
+    timestamps = [b["t"] for b in all_bars]
+    prices = [float(b["c"]) for b in all_bars]
 
     return (
-        pl.DataFrame(
-            {
-                "bm_timestamp": ts_series,
-                "benchmark_price": df_pd["Close"].astype(float),
-            }
+        pl.DataFrame({"bm_timestamp": timestamps, "benchmark_price": prices})
+        .with_columns(
+            pl.col("bm_timestamp")
+            .str.to_datetime("%Y-%m-%dT%H:%M:%SZ")
+            .dt.convert_time_zone("America/New_York")
+            .dt.replace_time_zone(None)
+            .cast(pl.Datetime("us"))
         )
-        .with_columns(pl.col("bm_timestamp").cast(pl.Datetime("us")))
         .sort("bm_timestamp")
     )
 

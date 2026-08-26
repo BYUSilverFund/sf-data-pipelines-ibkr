@@ -195,30 +195,37 @@ def ibkr_query_batches(
         to_date (dt.date): Date from which to end the query.
         flex_version (int): Version of Flex Query Service to use (we use version 3).
     """
-    # Validate start and end date.
+    # Handle 1-year IBKR API retention limit
     min_start_date = dt.date.today() - du.relativedelta(years=1)
     min_start_date = min_start_date.replace(day=1) + du.relativedelta(months=1)
 
+    if to_date < min_start_date:
+        # Entire requested range is older than 1 year; skip API call
+        return pl.DataFrame()
+
     if from_date < min_start_date:
-        raise Exception(
-            f"Invalid start date: {from_date}. Must be greater than or equal to {min_start_date}."
-        )
+        # Clamp start date to the earliest date available in IBKR API
+        from_date = min_start_date
 
     max_end_date = dt.date.today() - du.relativedelta(days=1)
-
     if to_date > max_end_date:
-        raise Exception(
-            f"Invalid end date: {to_date}. Must be less than or equal to {max_end_date}"
-        )
+        to_date = max_end_date
+
+    if from_date > to_date:
+        return pl.DataFrame()
 
     # Get date intervals
     date_intervals = _get_trading_date_intervals(from_date, to_date)
 
     df_list = []
-    for from_date, to_date in tqdm.tqdm(date_intervals, desc="Pulling data from IBKR"):
-        df = ibkr_query(token, query_id, from_date, to_date, flex_version)
-        df_list.append(df)
+    for f_date, t_date in tqdm.tqdm(date_intervals, desc="Pulling data from IBKR"):
+        df = ibkr_query(token, query_id, f_date, t_date, flex_version)
+        if df is not None and not df.is_empty():
+            df_list.append(df)
         time.sleep(5)  # Prevents rate limiting
+
+    if not df_list:
+        return pl.DataFrame()
 
     return pl.concat(df_list)
 

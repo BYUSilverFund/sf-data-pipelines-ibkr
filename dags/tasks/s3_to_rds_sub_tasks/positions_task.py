@@ -65,11 +65,20 @@ def positions_transform_and_load_daily():
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(
-            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
-        )
-        df_clean = clean_positions_data(df)
-        dfs.append(df_clean)
+        try:
+            df = pl.read_csv(
+                f"s3://{file}",
+                storage_options=storage_options,
+                infer_schema_length=10000,
+            )
+            df_clean = clean_positions_data(df)
+            if not df_clean.is_empty():
+                dfs.append(df_clean)
+        except Exception:
+            continue
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(subset=["report_date", "client_account_id", "symbol"])
 
@@ -91,21 +100,43 @@ def positions_transform_and_load_daily():
 
 @task(task_id="positions_transform_and_load")
 def positions_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
-    # 1. Process raw positions data
-    source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-positions.csv"
-
+    # 1. Process raw positions data from all S3 sources
     fs = fsspec.filesystem("s3", **storage_options)
-    file_list = fs.glob(source_pattern)
+
+    backfill_files = fs.glob(
+        f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-positions.csv"
+    )
+    history_files = fs.glob(
+        "s3://ibkr-flex-query-files/history-files/*/*positions*.csv"
+    )
+    daily_files = fs.glob("s3://ibkr-flex-query-files/daily-files/*/*/*positions.csv")
+
+    file_list = list(set(backfill_files + history_files + daily_files))
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(
-            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
-        )
-        df_clean = clean_positions_data(df)
-        dfs.append(df_clean)
+        try:
+            df = pl.read_csv(
+                f"s3://{file}",
+                storage_options=storage_options,
+                infer_schema_length=10000,
+            )
+            df_clean = clean_positions_data(df)
+            df_filtered = df_clean.filter(
+                pl.col("report_date").is_between(from_date, to_date)
+            )
+            if not df_filtered.is_empty():
+                dfs.append(df_filtered)
+        except Exception:
+            continue
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(subset=["report_date", "client_account_id", "symbol"])
+
+    if df.is_empty():
+        return
 
     # 2. Create core table if not exists
     db.execute_sql_file("dags/sql/positions_create.sql")

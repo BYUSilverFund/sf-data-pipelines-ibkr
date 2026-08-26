@@ -158,5 +158,11 @@ ruff check --fix
   - Zero/Negative NAV Check (`zero_negative_nav`) -> Flags invalid zero or negative account ending NAV values in delta_nav
   - Future Date & Data Freshness (`date_sync_across_tables`) -> Ensures no dates are in the future and all max(date) for each table match.
   - Trading Calendar Completeness (`missing_calendar_dates`) -> Verifies every NYSE trading date since 2023-07-17 is present in positions, holding_returns, fund_returns, and all_fund_returns
-- **`dashboard_dag_backfill`** *(Manual)*: Backfills IBKR statements, RDS tables, and return materializations for a custom date range (`from_date` to `to_date`).
-- **`dashboard_dag_reload`** *(Manual)*: Re-ingests stored S3 data into RDS and rebuilds all return materializations.
+  
+- **`dashboard_dag_backfill`** *(Manual Trigger)*: Backfills data for a specified date range (`from_date` to `to_date`):
+  - **IBKR Extraction (`ibkr_to_s3_backfill`)**: Pulls available dates within the 1-year API window and uploads CSVs to S3 bucket `ibkr-flex-query-files`. For dates older than 1 year, skips the API call (since IBKR does not retain data older than 365 days).
+  - **S3 to RDS Load (`s3_to_rds_backfill`)**: Reads matching date ranges across bucket `ibkr-flex-query-files`,attaches nearest IWV 1 minute bar price from Alpaca to all trades and merges rows into RDS (`trades`, `positions`, `dividends`, `delta_nav`).
+  - **External Sources**: Fetches full historical trading calendar, FRED risk-free rates, and daily benchmark returns.
+  - **Return Materializations**: Recomputes `holding_returns`, `fund_returns`, and `all_fund_returns` for the backfilled range.
+
+- **`dashboard_dag_reload`** *(Manual Trigger)*: Re-ingests all stored S3 data from `ibkr-flex-query-files` directly into RDS and recomputes all returns without hitting the IBKR API.

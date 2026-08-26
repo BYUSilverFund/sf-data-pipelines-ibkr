@@ -8,7 +8,6 @@ from airflow.sdk import task
 from aws.rds import db
 from aws.s3 import storage_options
 from tasks.benchmark_tasks import (
-    get_benchmark_data,
     get_intraday_benchmark_bars,
 )
 
@@ -86,60 +85,40 @@ def attach_benchmark_price(
 ) -> pl.DataFrame:
     """Attaches benchmark_price to trades at their trade_datetime using 1-minute benchmark bars.
 
-    If intraday bars are unavailable (e.g. for dates > 29 days ago), falls back to daily adjusted close.
+    If trade_datetime is null, benchmark_price is set to null.
     """
     if trades_df.is_empty():
         return trades_df.with_columns(
             pl.lit(None).cast(pl.Float64).alias("benchmark_price")
         )
 
+    valid_trades = trades_df.filter(pl.col("trade_datetime").is_not_null())
+    null_trades = trades_df.filter(pl.col("trade_datetime").is_null()).with_columns(
+        pl.lit(None).cast(pl.Float64).alias("benchmark_price")
+    )
+
+    if valid_trades.is_empty():
+        return null_trades.cast({"benchmark_price": pl.Float64})
+
     bm_bars = get_intraday_benchmark_bars(start_date, end_date)
 
     if not bm_bars.is_empty():
-        valid_trades = trades_df.filter(pl.col("trade_datetime").is_not_null())
-        null_trades = trades_df.filter(pl.col("trade_datetime").is_null())
-
-        if not valid_trades.is_empty():
-            valid_trades = (
-                valid_trades.sort("trade_datetime")
-                .join_asof(
-                    bm_bars.sort("bm_timestamp"),
-                    left_on="trade_datetime",
-                    right_on="bm_timestamp",
-                    strategy="nearest",
-                )
-                .drop("bm_timestamp")
+        valid_trades = (
+            valid_trades.sort("trade_datetime")
+            .join_asof(
+                bm_bars.sort("bm_timestamp"),
+                left_on="trade_datetime",
+                right_on="bm_timestamp",
+                strategy="nearest",
             )
-        else:
-            valid_trades = valid_trades.with_columns(
-                pl.lit(None).cast(pl.Float64).alias("benchmark_price")
-            )
-
-        null_trades = null_trades.with_columns(
+            .drop("bm_timestamp")
+        )
+    else:
+        valid_trades = valid_trades.with_columns(
             pl.lit(None).cast(pl.Float64).alias("benchmark_price")
         )
 
-        return pl.concat([valid_trades, null_trades]).cast(
-            {"benchmark_price": pl.Float64}
-        )
-
-    # Fallback to daily benchmark closing price
-    daily_bm = get_benchmark_data(start_date, end_date)
-    if not daily_bm.is_empty():
-        return (
-            trades_df.join(
-                daily_bm.select(["date", "adjusted_close"]),
-                left_on="report_date",
-                right_on="date",
-                how="left",
-            )
-            .rename({"adjusted_close": "benchmark_price"})
-            .cast({"benchmark_price": pl.Float64})
-        )
-
-    return trades_df.with_columns(
-        pl.lit(None).cast(pl.Float64).alias("benchmark_price")
-    )
+    return pl.concat([valid_trades, null_trades]).cast({"benchmark_price": pl.Float64})
 
 
 @task(task_id="trades_transform_and_load")
@@ -162,6 +141,9 @@ def trades_transform_and_load_daily():
         )
         df_clean = clean_trades_data(df)
         dfs.append(df_clean)
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
@@ -188,23 +170,44 @@ def trades_transform_and_load_daily():
 
 @task(task_id="trades_transform_and_load")
 def trades_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
-    # 1. Process raw positions data
-    source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-trades.csv"
-
+    # 1. Process raw trades data from all S3 sources
     fs = fsspec.filesystem("s3", **storage_options)
-    file_list = fs.glob(source_pattern)
+
+    backfill_files = fs.glob(
+        f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-trades.csv"
+    )
+    history_files = fs.glob("s3://ibkr-flex-query-files/history-files/*/*trades*.csv")
+    daily_files = fs.glob("s3://ibkr-flex-query-files/daily-files/*/*/*trades.csv")
+
+    file_list = list(set(backfill_files + history_files + daily_files))
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(
-            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
-        )
-        df_clean = clean_trades_data(df)
-        dfs.append(df_clean)
+        try:
+            df = pl.read_csv(
+                f"s3://{file}",
+                storage_options=storage_options,
+                infer_schema_length=10000,
+            )
+            df_clean = clean_trades_data(df)
+            # Filter to requested date range early
+            df_filtered = df_clean.filter(
+                pl.col("report_date").is_between(from_date, to_date)
+            )
+            if not df_filtered.is_empty():
+                dfs.append(df_filtered)
+        except Exception:
+            continue
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
     )
+
+    if df.is_empty():
+        return
 
     # 2. Attach intraday benchmark price at execution time
     df = attach_benchmark_price(df, from_date, to_date)
@@ -252,6 +255,9 @@ def trades_transform_and_load_reload():
         )
         df_clean = clean_trades_data(df)
         dfs.append(df_clean)
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(
         subset=["report_date", "client_account_id", "symbol", "trade_id"]
