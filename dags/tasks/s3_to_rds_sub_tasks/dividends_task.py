@@ -71,7 +71,7 @@ def dividends_transform_and_load_daily():
     yesterday = dt.date.today() - du.relativedelta(days=1)
     last_market_date = tools.get_last_market_date(reference_date=yesterday)
 
-    # 1. Process raw positions data
+    # 1. Process raw dividends data
     source_pattern = (
         f"s3://ibkr-flex-query-files/daily-files/{last_market_date}/*/*-dividends.csv"
     )
@@ -81,11 +81,20 @@ def dividends_transform_and_load_daily():
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(
-            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
-        )
-        df_clean = clean_dividends_data(df)
-        dfs.append(df_clean)
+        try:
+            df = pl.read_csv(
+                f"s3://{file}",
+                storage_options=storage_options,
+                infer_schema_length=10000,
+            )
+            df_clean = clean_dividends_data(df)
+            if not df_clean.is_empty():
+                dfs.append(df_clean)
+        except Exception:
+            continue
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(
         subset=["report_date", "client_account_id", "symbol", "action_id"]
@@ -109,23 +118,45 @@ def dividends_transform_and_load_daily():
 
 @task(task_id="dividends_transform_and_load")
 def dividends_transform_and_load_backfill(from_date: dt.date, to_date: dt.date):
-    # 1. Process raw positions data
-    source_pattern = f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-dividends.csv"
-
+    # 1. Process raw dividends data from all S3 sources
     fs = fsspec.filesystem("s3", **storage_options)
-    file_list = fs.glob(source_pattern)
+
+    backfill_files = fs.glob(
+        f"s3://ibkr-flex-query-files/backfill-files/{from_date}_{to_date}/*/*-dividends.csv"
+    )
+    history_files = fs.glob(
+        "s3://ibkr-flex-query-files/history-files/*/*dividends*.csv"
+    )
+    daily_files = fs.glob("s3://ibkr-flex-query-files/daily-files/*/*/*dividends.csv")
+
+    file_list = list(set(backfill_files + history_files + daily_files))
 
     dfs = []
     for file in file_list:
-        df = pl.read_csv(
-            f"s3://{file}", storage_options=storage_options, infer_schema_length=10000
-        )
-        df_clean = clean_dividends_data(df)
-        dfs.append(df_clean)
+        try:
+            df = pl.read_csv(
+                f"s3://{file}",
+                storage_options=storage_options,
+                infer_schema_length=10000,
+            )
+            df_clean = clean_dividends_data(df)
+            df_filtered = df_clean.filter(
+                pl.col("report_date").is_between(from_date, to_date)
+            )
+            if not df_filtered.is_empty():
+                dfs.append(df_filtered)
+        except Exception:
+            continue
+
+    if not dfs:
+        return
 
     df = pl.concat(dfs).unique(
         subset=["report_date", "client_account_id", "symbol", "action_id"]
     )
+
+    if df.is_empty():
+        return
 
     # 2. Create core table if not exists
     db.execute_sql_file("dags/sql/dividends_create.sql")
