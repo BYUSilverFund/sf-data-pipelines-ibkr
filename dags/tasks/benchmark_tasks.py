@@ -64,12 +64,8 @@ def get_intraday_benchmark_bars(
     - bm_timestamp (pl.Datetime("us")): Naive datetime in US/Eastern (matching IBKR)
     - benchmark_price (pl.Float64)
     """
-    api_key = (
-        os.getenv("APCA_API_KEY")
-        or os.getenv("ALPACA_API_KEY")
-        or os.getenv("APCA_API_KEY_ID")
-    )
-    secret_key = os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_SECRET_KEY")
+    api_key = os.getenv("APCA_API_KEY")
+    secret_key = os.getenv("APCA_API_SECRET_KEY")
 
     if not api_key or not secret_key:
         logger.warning("APCA_API_KEY or APCA_API_SECRET_KEY not found in environment.")
