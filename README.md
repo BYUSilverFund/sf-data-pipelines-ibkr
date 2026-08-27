@@ -4,45 +4,79 @@ Silver Fund's data pipelines for IBKR flex query reporting data.
 
 ## Setup
 
-Install docker by following this [guide](https://docs.docker.com/desktop/setup/install/mac-install/)
+### Prerequisites
 
-## Development
+- [Docker Desktop](https://docs.docker.com/get-docker/) installed and running.
+- Python 3.11+ (for local linting, pre-commit, and test workflows).
 
-Install pre-commit hooks
+### 1. Environment Configuration
+
+Copy `example.env` to `.env` and fill in your AWS, RDS, and API credentials:
 
 ```bash
+cp example.env .env
+```
+
+Refer to [`example.env`](example.env) for full variable descriptions:
+- **`AIRFLOW_UID` / `AIRFLOW_GID`**: Host user and group ID for Airflow container permissions (`50000` / `0`).
+- **`USER_ACCESS_KEY_ID` / `USER_SECRET_ACCESS_KEY`**: AWS IAM credentials for S3 bucket ingestion.
+- **`DB_*`**: RDS PostgreSQL database connection credentials.
+- **`FRED_API_KEY` / `APCA_*`**: FRED risk-free rate & Alpaca market data API keys.
+- **`_AIRFLOW_WWW_USER_*`**: Local web UI admin credentials.
+- **`SLACK_*`**: Slack bot token and alert channel ID.
+- **IBKR Tokens**: Individual Flex Query tokens for portfolio accounts (`GRAD_TOKEN`, `UNDERGRAD_TOKEN`, etc.).
+
+### 2. Local Python Environment & Pre-commit Hooks
+
+Create a virtual environment and install development dependencies for local linting and pre-commit checks:
+
+```bash
+python -m venv .venv
+```
+
+```bash
+# On macOS/Linux:
+source .venv/bin/activate
+# On Windows:
+.venv\Scripts\Activate.ps1
+```
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install
 ```
 
-For local development, generate self-signed certificates using OpenSSL (you will only need to do this once) alternatively you may be able to run it by commenting out the nginx and certbot containers in the `docker-compose.yaml` file:
+### 3. Local SSL Certificates (Optional for HTTPS)
 
+For local development, generate self-signed certificates using OpenSSL (you will only need to do this once). Alternatively, you can run Airflow over plain HTTP by commenting out the `nginx` and `certbot` containers in `docker-compose.yaml`:
+
+Generate the `fullchain.pem` and `privkey.pem` certs:
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout privkey.pem -out fullchain.pem -days 365 -nodes -subj "/C=US/ST=Utah/L=Provo/O=SilverFund/CN=localhost"
 ```
 
-After generating the certificates, place both `fullchain.pem` and `privkey.pem` in the `certbot/conf/live/airflow.silverfund.byu.edu/` directory on your local machine (or the directory referenced by your local `nginx.conf`). This allows Nginx to use the self-signed certificates for HTTPS during development.
+Place both `fullchain.pem` and `privkey.pem` in `certbot/conf/live/airflow.silverfund.byu.edu/` (or the directory referenced by `nginx.conf`).
 
-Spin up the containers using
+### 4. Running Airflow
+
+Spin up the cluster:
 
 ```bash
 docker compose up --build
 ```
 
-Access the web UI at
-[http://localhost:8080](http://localhost:8080)
-or if you are using self signed certs and the reverse proxy then
-[https://localhost](https://localhost)
+Access the web UI at:
+- HTTP: [http://localhost:8080](http://localhost:8080)
+- HTTPS (if using reverse proxy certs): [https://localhost](https://localhost)
 
-Login using whatever you have set your local login to be.
+Default credentials (or whatever you set in `.env`):
+- **Username**: `airflow`
+- **Password**: `airflow`
 
-- username: airflow
-
-- password: airflow
-
-Shut down containers using
+Shut down containers:
 
 ```bash
-docker compose down 
+docker compose down
 ```
 
 ## Reverse Proxy Nginx Server (HTTPS)
@@ -51,24 +85,23 @@ The reverse proxy is an Nginx server running in a Docker container as part of th
 
 #### TLS Certificate Management:
 
-
 ##### Production
 
-To issue certificates using Certbot, run the following command (one time setup):
+To issue certificates using Certbot, run the following command (one-time setup):
 
 ```bash
-docker-compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu
+docker compose run certbot certonly --webroot -w /var/www/certbot -d airflow.silverfund.byu.edu
 ```
 
 To renew certificates, run the following command:
 
 ```bash
-docker-compose run certbot renew
+docker compose run certbot renew
 ```
 
-the above ^^ command is ran daily using a systemd timer on the EC2 instance.
+The above command is run daily using a systemd timer on the EC2 instance.
 
-Copy the `certbot-renew.service` and `certbot-renew.timer` files to the following locations (for setup and any changes)
+Copy the `certbot-renew.service` and `certbot-renew.timer` files to the following locations:
 
 - **Service file location:** `/etc/systemd/system/certbot-renew.service`
 - **Timer file location:** `/etc/systemd/system/certbot-renew.timer`
@@ -82,28 +115,27 @@ Copy the `certbot-renew.service` and `certbot-renew.timer` files to the followin
   sudo systemctl enable --now certbot-renew.timer
   ```
 - **View renewal logs:**
-
   ```bash
   sudo journalctl -u certbot-renew.service
   ```
 
 #### Notes:
 
-- Let's Encrypt's Certbot does not issue certificates for local testing because it requires a publicly resolvable domain name to verify ownership. However, for local testing, you can generate certificates using self-signed certificates.
+- Let's Encrypt's Certbot does not issue certificates for local testing because it requires a publicly resolvable domain name to verify ownership.
 - On the production server, the Certbot container will manage certificates.
-- For local development, you will need to use OpenSSL to create certificates. Alternatively, you can comment out the SSL server section in your `nginx.conf` file, or simply exclude the Nginx and Certbot containers from your Docker Compose setup. These components are only required for production environments where HTTPS and certificate management are necessary.
-
+- For local development, use OpenSSL to create certificates or exclude the Nginx and Certbot containers from Docker Compose.
 
 ### Infrastructure Notes
 
 - Airflow is hosted on an EC2 instance (named `airflow`).
 - This EC2 is not managed by Terraform and does not have a dev environment.
-- Environment variables are on the EC2 in a .env file within the airflow directory at /home/ec2_user/airflow/.env
-- The airflow instance is updated on merge to prod branch by an AWS codepipeline that is managed by terraform.NOTE: this codepipeline has not been working recently due to IAM permissions issues that I think are coming from a change in an upstream org. Instead of running the codepipeline you can connect to the EC2, cd /home/ec2-user/airflow, git pull (this will pull from prod), then docker-compose down; docker-compose up --build -d. This will restart airflow with your updated changes.
+- Environment variables are on the EC2 in a `.env` file within the airflow directory at `/home/ec2-user/airflow/.env`.
+- The airflow instance is updated on merge to the `prod` branch by an AWS CodePipeline managed by Terraform.
+  - **Manual deployment fallback**: Connect to the EC2, navigate to `/home/ec2-user/airflow`, pull changes with `git pull`, and restart with `docker compose down && docker compose up --build -d`.
 
 ## Code Quality
 
-We use **Ruff** for both linting and formatting. Make sure to lint and format before pushing to Github. Github Actions is set up to fail ruff fails.
+We use **Ruff** for both linting and formatting. GitHub Actions is configured to fail if Ruff checks fail.
 
 ### Format Code
 
