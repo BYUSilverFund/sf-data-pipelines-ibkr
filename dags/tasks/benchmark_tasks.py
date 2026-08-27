@@ -90,6 +90,7 @@ def get_intraday_benchmark_bars(
             "start": start_date.isoformat(),
             "end": query_end.isoformat(),
             "feed": feed,
+            "adjustment": "all",
             "limit": 10000,
             "sort": "asc",
         }
