@@ -2,9 +2,12 @@ import datetime as _dt
 import logging
 import os
 
+import dotenv
 import pytz
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+
+dotenv.load_dotenv(override=True)
 
 
 logger = logging.getLogger(__name__)
